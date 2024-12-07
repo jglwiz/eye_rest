@@ -12,8 +12,8 @@ class MainFrame(wx.Frame):
         super().__init__(None, title="护眼助手", size=(300, 250))
         
         self.config = Config()
-        self.is_working = False
-        self.is_resting = False
+        self.is_running = False # 是否开启提醒
+        self.is_resting = False # 是否在休息状态
         self.rest_screen = None  # 延迟创建RestScreen
         self.force_rest_thread = None
         self.real_close = False
@@ -99,14 +99,14 @@ class MainFrame(wx.Frame):
         with self.thread_lock:
             self.is_resting = False
             # 重新启动工作计时器
-            if self.is_working and (not self.timer_thread or not self.timer_thread.is_alive()):
+            if self.is_running and (not self.timer_thread or not self.timer_thread.is_alive()):
                 self.timer_thread = threading.Thread(target=self.timer_func)
                 self.timer_thread.daemon = True
                 self.timer_thread.start()
 
     def _stop_all_threads(self):
         """停止所有计时器线程"""
-        self.is_working = False
+        self.is_running = False
         self.is_resting = False
         # 等待线程结束
         if self.timer_thread and self.timer_thread.is_alive():
@@ -135,7 +135,7 @@ class MainFrame(wx.Frame):
                 time.sleep(1)
             
             # 自动解锁并重置工作计时器
-            if self.is_working:  # 只在程序仍在运行时执行
+            if self.is_running:  # 只在程序仍在运行时执行
                 wx.CallAfter(self.rest_screen.Hide)
                 # 设置为非休息状态
                 self.is_resting = False
@@ -153,7 +153,7 @@ class MainFrame(wx.Frame):
             # 如果没有在休息，停止所有线程并启动新的休息计时器
             elif not self.is_resting:
                 self._stop_all_threads()
-                self.is_working = True  # 保持工作状态
+                self.is_running = True  # 保持工作状态
                 self.force_rest_thread = threading.Thread(target=self.force_rest_timer)
                 self.force_rest_thread.daemon = True
                 self.force_rest_thread.start()
@@ -166,13 +166,13 @@ class MainFrame(wx.Frame):
         
     def on_toggle(self, event):
         with self.thread_lock:
-            if not self.is_working:
+            if not self.is_running:
                 # 开始计时
                 self.config.work_time = self.work_spin.GetValue()
                 self.config.rest_time = self.rest_spin.GetValue()
                 self.config.save()  # 保存配置
                 self._stop_all_threads()  # 确保停止所有线程
-                self.is_working = True
+                self.is_running = True
                 self.toggle_btn.SetLabel("停止")
                 self.timer_thread = threading.Thread(target=self.timer_func)
                 self.timer_thread.daemon = True
@@ -187,17 +187,17 @@ class MainFrame(wx.Frame):
                     self.rest_screen.Hide()
             
     def timer_func(self):
-        while self.is_working and not self.is_resting:
+        while self.is_running and not self.is_resting:
             # 工作时间
             work_end_time = time.time() + self.config.work_time * 60
-            while time.time() < work_end_time and self.is_working and not self.is_resting:
+            while time.time() < work_end_time and self.is_running and not self.is_resting:
                 remaining = int(work_end_time - time.time())
                 if remaining > 0:
                     wx.CallAfter(self.status.SetLabel, f"工作中: 还剩 {remaining//60}:{remaining%60:02d}")
                 time.sleep(1)
             
             # 如果不是在工作状态或者正在休息，退出
-            if not self.is_working or self.is_resting:
+            if not self.is_running or self.is_resting:
                 return
                 
             # 开始休息
@@ -214,10 +214,10 @@ class MainFrame(wx.Frame):
             
             # 等待休息时间结束
             rest_end_time = time.time() + self.config.rest_time * 60
-            while time.time() < rest_end_time and self.is_working and self.is_resting:
+            while time.time() < rest_end_time and self.is_running and self.is_resting:
                 time.sleep(1)
             
-            if not self.is_working:
+            if not self.is_running:
                 wx.CallAfter(self.rest_screen.Hide)
                 return
                 
