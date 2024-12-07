@@ -1,0 +1,1 @@
+pyinstaller --onefile -w  --clean .\src\main.py

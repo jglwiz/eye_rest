@@ -3,7 +3,6 @@ import wx.adv
 import threading
 import time
 import keyboard
-# import sys, pprint; pprint.pprint(sys.path)
 from lib.rest_screen import RestScreen
 from lib.taskbar import TaskBarIcon
 from lib.config import Config
@@ -15,7 +14,7 @@ class MainFrame(wx.Frame):
         self.config = Config()
         self.is_working = False
         self.is_resting = False
-        self.rest_screen = RestScreen()
+        self.rest_screen = None  # 延迟创建RestScreen
         self.force_rest_thread = None
         self.real_close = False
         
@@ -84,11 +83,24 @@ class MainFrame(wx.Frame):
             pass
         keyboard.add_hotkey(self.config.hotkey, self.on_force_rest)
 
+    def _ensure_rest_screen(self):
+        # 确保RestScreen实例存在并且使用当前的休息时间
+        if not self.rest_screen:
+            self.rest_screen = RestScreen(self.config.rest_time)
+        elif self.rest_screen.rest_seconds != self.config.rest_time * 60:
+            self.rest_screen.Destroy()
+            self.rest_screen = RestScreen(self.config.rest_time)
+
     def force_rest_timer(self):
+        # 确保在主线程中创建RestScreen
+        wx.CallAfter(self._ensure_rest_screen)
+        # 等待RestScreen创建完成
+        time.sleep(0.1)
+        
         # 设置休息状态
         self.is_resting = True
         
-        # 休息时间
+        # 显示休息界面
         wx.CallAfter(self.rest_screen.Show)
         wx.CallAfter(self.rest_screen.Maximize, True)
         wx.CallAfter(self.status.SetLabel, "休息时间")
@@ -139,7 +151,8 @@ class MainFrame(wx.Frame):
             self.is_resting = False  # 重置休息状态
             self.toggle_btn.SetLabel("开始")
             self.status.SetLabel("就绪")
-            self.rest_screen.Hide()
+            if self.rest_screen:
+                self.rest_screen.Hide()
             
     def timer_func(self):
         while self.is_working:
@@ -155,18 +168,25 @@ class MainFrame(wx.Frame):
                 return
                 
             self.is_resting = True  # 设置休息状态
+            
+            # 确保在主线程中创建RestScreen
+            wx.CallAfter(self._ensure_rest_screen)
+            # 等待RestScreen创建完成
+            time.sleep(0.1)
+            
             wx.CallAfter(self.rest_screen.Show)
             wx.CallAfter(self.rest_screen.Maximize, True)  # 确保最大化
             wx.CallAfter(self.status.SetLabel, "休息时间")
             
-            for i in range(self.config.rest_time * 60, -1, -1):
-                if not self.is_working:
-                    wx.CallAfter(self.rest_screen.Hide)
-                    return
-                if i == 0:  # 休息时间结束时自动解锁
-                    wx.CallAfter(self.rest_screen.Hide)
-                    self.is_resting = False  # 重置休息状态
-                time.sleep(1)
+            # 等待休息时间结束
+            time.sleep(self.config.rest_time * 60)
+            
+            if not self.is_working:
+                wx.CallAfter(self.rest_screen.Hide)
+                return
+                
+            wx.CallAfter(self.rest_screen.Hide)
+            self.is_resting = False  # 重置休息状态
 
     def on_set_hotkey(self, event):
         new_hotkey = self.hotkey_text.GetValue().strip()
@@ -195,7 +215,8 @@ class MainFrame(wx.Frame):
             except:
                 pass
             self.taskbar_icon.Destroy()
-            self.rest_screen.Destroy()
+            if self.rest_screen:
+                self.rest_screen.Destroy()
             event.Skip()
         else:  # 如果是点击关闭按钮
             self.Hide()
