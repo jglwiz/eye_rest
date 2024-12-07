@@ -164,6 +164,7 @@ class MainFrame(wx.Frame):
         
         self.load_config()  # 加载配置
         self.is_working = False
+        self.is_resting = False  # 添加休息状态标志
         self.rest_screen = RestScreen()
         self.force_rest_thread = None
         self.real_close = False  # 添加标志位，用于区分是否真正关闭程序
@@ -216,7 +217,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.on_close)
         
         # 注册全局热键
-        self.register_hotkey()
+        keyboard.add_hotkey(self.hotkey, self.on_force_rest)
         
         # 居中显示
         self.Center()
@@ -248,23 +249,28 @@ class MainFrame(wx.Frame):
         with open("eye_rest_config.json", "w") as f:
             json.dump(config, f)
             
-    def register_hotkey(self):
-        try:
-            keyboard.remove_hotkey(self.hotkey)  # 移除旧的热键
-        except:
-            pass
-        keyboard.add_hotkey(self.hotkey, self.on_force_rest)
-        
     def on_set_hotkey(self, event):
         dialog = HotkeyDialog(self, self.hotkey)
         if dialog.ShowModal() == wx.ID_OK:
+            # 移除旧的热键
+            try:
+                keyboard.remove_hotkey(self.hotkey)
+            except:
+                pass
+            
             self.hotkey = dialog.new_hotkey
             self.hotkey_btn.SetLabel(self.hotkey)
             self.save_config()
-            self.register_hotkey()
+            
+            # 注册新的热键
+            keyboard.add_hotkey(self.hotkey, self.on_force_rest)
+            
         dialog.Destroy()
         
     def force_rest_timer(self):
+        # 设置休息状态
+        self.is_resting = True
+        
         # 休息时间
         wx.CallAfter(self.rest_screen.Show)
         wx.CallAfter(self.rest_screen.Maximize, True)
@@ -273,20 +279,30 @@ class MainFrame(wx.Frame):
         # 等待休息时间结束
         time.sleep(self.rest_time * 60)
         
-        # 自动解锁
+        # 自动解锁并重置工作计时器
         if self.is_working:  # 只在程序仍在运行时执行
             wx.CallAfter(self.rest_screen.Hide)
+            # 设置为非休息状态
+            self.is_resting = False
+            # 重新启动工作计时器
+            if self.timer_thread and self.timer_thread.is_alive():
+                self.timer_thread = threading.Thread(target=self.timer_func)
+                self.timer_thread.daemon = True
+                self.timer_thread.start()
         
     def on_force_rest(self, event=None):
-        if self.is_working:
-            # 如果已经有强制休息线程在运行，先停止它
+        # 如果当前正在休息，重置休息计时器
+        if self.is_resting:
             if self.force_rest_thread and self.force_rest_thread.is_alive():
-                return
-                
-            # 创建新的强制休息线程
-            self.force_rest_thread = threading.Thread(target=self.force_rest_timer)
-            self.force_rest_thread.daemon = True
-            self.force_rest_thread.start()
+                self.force_rest_thread = threading.Thread(target=self.force_rest_timer)
+                self.force_rest_thread.daemon = True
+                self.force_rest_thread.start()
+        else:
+            # 如果没有在休息，启动休息计时器
+            if not self.force_rest_thread or not self.force_rest_thread.is_alive():
+                self.force_rest_thread = threading.Thread(target=self.force_rest_timer)
+                self.force_rest_thread.daemon = True
+                self.force_rest_thread.start()
         
     def on_toggle(self, event):
         if not self.is_working:
@@ -303,6 +319,7 @@ class MainFrame(wx.Frame):
         else:
             # 停止计时
             self.is_working = False
+            self.is_resting = False  # 重置休息状态
             self.toggle_btn.SetLabel("开始")
             self.status.SetLabel("就绪")
             self.rest_screen.Hide()
@@ -319,6 +336,8 @@ class MainFrame(wx.Frame):
             # 休息时间
             if not self.is_working:
                 return
+                
+            self.is_resting = True  # 设置休息状态
             wx.CallAfter(self.rest_screen.Show)
             wx.CallAfter(self.rest_screen.Maximize, True)  # 确保最大化
             wx.CallAfter(self.status.SetLabel, "休息时间")
@@ -329,11 +348,13 @@ class MainFrame(wx.Frame):
                     return
                 if i == 0:  # 休息时间结束时自动解锁
                     wx.CallAfter(self.rest_screen.Hide)
+                    self.is_resting = False  # 重置休息状态
                 time.sleep(1)
                 
     def on_close(self, event):
         if self.real_close:  # 如果是真正的关闭操作
             self.is_working = False
+            self.is_resting = False
             try:
                 keyboard.remove_hotkey(self.hotkey)  # 移除热键
             except:
