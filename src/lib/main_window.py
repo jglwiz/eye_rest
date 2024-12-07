@@ -12,10 +12,9 @@ class MainFrame(wx.Frame):
         super().__init__(None, title="护眼助手", size=(300, 250))
         
         self.config = Config()
-        self.is_running = False # 是否开启提醒
-        self.is_resting = False # 是否在休息状态
-        self.rest_screen = None  # 延迟创建RestScreen
-        self.force_rest_thread = None
+        self.is_running = False  # 是否开启提醒
+        self.is_resting = False  # 是否在休息状态
+        self.rest_screen = RestScreen(self.config.rest_time, self.on_rest_early_exit)  # 创建单例RestScreen
         self.real_close = False
         
         # 创建系统托盘图标
@@ -24,11 +23,17 @@ class MainFrame(wx.Frame):
         self._init_ui()
         self._init_hotkey()
         
-        # 创建计时器线程
-        self.timer_thread = None
+        # 创建永久运行的计时器线程
+        self.timer_thread = threading.Thread(target=self.timer_func)
+        self.timer_thread.daemon = True
         
         # 添加线程锁
         self.thread_lock = threading.Lock()
+        
+        # 添加工作结束时间变量
+        self.work_end_time = time.time()
+        # 添加休息结束时间变量
+        self.rest_end_time = time.time()
         
         # 绑定关闭事件
         self.Bind(wx.EVT_CLOSE, self.on_close)
@@ -86,84 +91,39 @@ class MainFrame(wx.Frame):
             pass
         keyboard.add_hotkey(self.config.hotkey, self.on_force_rest)
 
-    def _ensure_rest_screen(self):
-        # 确保RestScreen实例存在并且使用当前的休息时间
-        if not self.rest_screen:
-            self.rest_screen = RestScreen(self.config.rest_time, self.on_rest_early_exit)
-        elif self.rest_screen.rest_seconds != self.config.rest_time * 60:
-            self.rest_screen.Destroy()
-            self.rest_screen = RestScreen(self.config.rest_time, self.on_rest_early_exit)
-
     def on_rest_early_exit(self):
         """处理提前退出休息的回调"""
         with self.thread_lock:
             self.is_resting = False
-            # 重新启动工作计时器
-            if self.is_running and (not self.timer_thread or not self.timer_thread.is_alive()):
-                self.timer_thread = threading.Thread(target=self.timer_func)
-                self.timer_thread.daemon = True
-                self.timer_thread.start()
+            # 重置工作计时
+            self.work_end_time = time.time() + self.config.work_time * 60
 
-    def _stop_all_threads(self):
-        """停止所有计时器线程"""
-        self.is_running = False
-        self.is_resting = False
-        # 等待线程结束
-        if self.timer_thread and self.timer_thread.is_alive():
-            self.timer_thread.join(0.1)
-        if self.force_rest_thread and self.force_rest_thread.is_alive():
-            self.force_rest_thread.join(0.1)
+    def start_rest(self):
+        """开始休息"""
+        self.is_resting = True
+        self.rest_end_time = time.time() + self.config.rest_time * 60
+        wx.CallAfter(self.rest_screen.Show)
+        wx.CallAfter(self.rest_screen.Maximize, True)
+        wx.CallAfter(self.status.SetLabel, "休息时间")
 
-    def force_rest_timer(self):
-        with self.thread_lock:
-            # 确保在主线程中创建RestScreen
-            wx.CallAfter(self._ensure_rest_screen)
-            # 等待RestScreen创建完成
-            time.sleep(0.1)
-            
-            # 设置休息状态
-            self.is_resting = True
-            
-            # 显示休息界面
-            wx.CallAfter(self.rest_screen.Show)
-            wx.CallAfter(self.rest_screen.Maximize, True)
-            wx.CallAfter(self.status.SetLabel, "休息时间")
-            
-            # 等待休息时间结束
-            rest_end_time = time.time() + self.config.rest_time * 60
-            while time.time() < rest_end_time and self.is_resting:
-                time.sleep(1)
-            
-            # 自动解锁并重置工作计时器
-            if self.is_running:  # 只在程序仍在运行时执行
-                wx.CallAfter(self.rest_screen.Hide)
-                # 设置为非休息状态
-                self.is_resting = False
-                # 重新启动工作计时器
-                if not self.timer_thread or not self.timer_thread.is_alive():
-                    self.timer_thread = threading.Thread(target=self.timer_func)
-                    self.timer_thread.daemon = True
-                    self.timer_thread.start()
-        
     def on_force_rest(self, event=None):
+        """处理提前休息"""
         with self.thread_lock:
-            # 如果当前正在休息，尝试重置休息计时器
-            if self.is_resting and self.rest_screen:
-                wx.CallAfter(self._reset_rest_timer)
-            # 如果没有在休息，停止所有线程并启动新的休息计时器
-            elif not self.is_resting:
-                self._stop_all_threads()
-                self.is_running = True  # 保持工作状态
-                self.force_rest_thread = threading.Thread(target=self.force_rest_timer)
-                self.force_rest_thread.daemon = True
-                self.force_rest_thread.start()
+            if not self.is_running:
+                # 如果程序未运行，先启动程序
+                self.is_running = True
+                self.toggle_btn.SetLabel("停止")
+                if not self.timer_thread.is_alive():
+                    self.timer_thread.start()
             
-    def _reset_rest_timer(self):
-        """在主线程中重置休息计时器"""
-        if self.rest_screen and self.rest_screen.reset_timer():
-            # 如果重置成功，更新休息结束时间
-            self.is_resting = True
-        
+            if self.is_resting:
+                # 如果当前正在休息，重置休息计时器
+                wx.CallAfter(self.rest_screen.reset_timer)
+                self.rest_end_time = time.time() + self.config.rest_time * 60
+            else:
+                # 开始新的休息
+                self.start_rest()
+            
     def on_toggle(self, event):
         with self.thread_lock:
             if not self.is_running:
@@ -171,58 +131,54 @@ class MainFrame(wx.Frame):
                 self.config.work_time = self.work_spin.GetValue()
                 self.config.rest_time = self.rest_spin.GetValue()
                 self.config.save()  # 保存配置
-                self._stop_all_threads()  # 确保停止所有线程
                 self.is_running = True
                 self.toggle_btn.SetLabel("停止")
-                self.timer_thread = threading.Thread(target=self.timer_func)
-                self.timer_thread.daemon = True
-                self.timer_thread.start()
+                # 设置初始工作结束时间
+                self.work_end_time = time.time() + self.config.work_time * 60
+                if not self.timer_thread.is_alive():
+                    self.timer_thread.start()
                 self.Hide()  # 隐藏主窗口
             else:
                 # 停止计时
-                self._stop_all_threads()
+                self.is_running = False
+                self.is_resting = False
                 self.toggle_btn.SetLabel("开始")
                 self.status.SetLabel("就绪")
-                if self.rest_screen:
-                    self.rest_screen.Hide()
+                self.rest_screen.Hide()
             
     def timer_func(self):
-        while self.is_running and not self.is_resting:
-            # 工作时间
-            work_end_time = time.time() + self.config.work_time * 60
-            while time.time() < work_end_time and self.is_running and not self.is_resting:
-                remaining = int(work_end_time - time.time())
-                if remaining > 0:
-                    wx.CallAfter(self.status.SetLabel, f"工作中: 还剩 {remaining//60}:{remaining%60:02d}")
-                time.sleep(1)
-            
-            # 如果不是在工作状态或者正在休息，退出
-            if not self.is_running or self.is_resting:
-                return
+        """永久运行的计时器线程，根据状态切换工作/休息模式"""
+        while True:
+            with self.thread_lock:
+                if not self.is_running:
+                    time.sleep(0.5)
+                    continue
+                    
+                current_time = time.time()
                 
-            # 开始休息
-            self.is_resting = True
-            
-            # 确保在主线程中创建RestScreen
-            wx.CallAfter(self._ensure_rest_screen)
-            # 等待RestScreen创建完成
-            time.sleep(0.1)
-            
-            wx.CallAfter(self.rest_screen.Show)
-            wx.CallAfter(self.rest_screen.Maximize, True)
-            wx.CallAfter(self.status.SetLabel, "休息时间")
-            
-            # 等待休息时间结束
-            rest_end_time = time.time() + self.config.rest_time * 60
-            while time.time() < rest_end_time and self.is_running and self.is_resting:
-                time.sleep(1)
-            
-            if not self.is_running:
-                wx.CallAfter(self.rest_screen.Hide)
-                return
+                if self.is_resting:
+                    # 休息状态
+                    if current_time >= self.rest_end_time:
+                        # 休息结束
+                        wx.CallAfter(self.rest_screen.Hide)
+                        self.is_resting = False
+                        # 设置下一个工作结束时间
+                        self.work_end_time = current_time + self.config.work_time * 60
+                    else:
+                        remaining = int(self.rest_end_time - current_time)
+                        if remaining > 0:
+                            wx.CallAfter(self.status.SetLabel, f"休息中: 还剩 {remaining//60}:{remaining%60:02d}")
+                else:
+                    # 工作状态
+                    if current_time >= self.work_end_time:
+                        # 工作结束，开始休息
+                        self.start_rest()
+                    else:
+                        remaining = int(self.work_end_time - current_time)
+                        if remaining > 0:
+                            wx.CallAfter(self.status.SetLabel, f"工作中: 还剩 {remaining//60}:{remaining%60:02d}")
                 
-            wx.CallAfter(self.rest_screen.Hide)
-            self.is_resting = False
+            time.sleep(1)
 
     def on_set_hotkey(self, event):
         new_hotkey = self.hotkey_text.GetValue().strip()
@@ -244,14 +200,13 @@ class MainFrame(wx.Frame):
                 
     def on_close(self, event):
         if self.real_close:  # 如果是真正的关闭操作
-            self._stop_all_threads()
+            self.is_running = False  # 停止计时器线程
             try:
                 keyboard.remove_hotkey(self.config.hotkey)  # 移除热键
             except:
                 pass
             self.taskbar_icon.Destroy()
-            if self.rest_screen:
-                self.rest_screen.Destroy()
+            self.rest_screen.Destroy()
             event.Skip()
         else:  # 如果是点击关闭按钮
             self.Hide()

@@ -74,12 +74,9 @@ class RestScreen(wx.Frame):
         # 创建定时器
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_timer)
-        self.timer.Start(1000)  # 每秒更新一次
-        
-        # 初始更新显示
-        self.update_display()
         
     def update_display(self):
+        """更新显示内容"""
         # 更新当前时间
         current_time = datetime.now().strftime("%H:%M:%S")
         self.time_text.SetLabel("当前时间: " + current_time)
@@ -90,17 +87,20 @@ class RestScreen(wx.Frame):
         self.countdown_text.SetLabel(f"休息时间还剩: {minutes:02d}:{seconds:02d}")
         
     def on_timer(self, event):
+        """定时器回调"""
         if self.remaining_seconds > 0:
             self.remaining_seconds -= 1
         self.update_display()
         
     def on_key(self, event):
+        """按键事件处理"""
         # 禁用Alt+F4和其他快捷键
         if event.AltDown():
             return
         event.Skip()
         
     def on_show(self, event):
+        """显示事件处理"""
         if event.IsShown():
             self.Maximize(True)
             self.input.SetFocus()
@@ -108,17 +108,25 @@ class RestScreen(wx.Frame):
             self.remaining_seconds = self.rest_seconds
             # 重置上次重置时间
             self.last_reset_time = time.time()
+            # 启动定时器
+            self.timer.Start(1000)
+        else:
+            # 停止定时器
+            self.timer.Stop()
         event.Skip()
         
     def on_close(self, event):
-        # 阻止窗口关闭
-        pass
+        """关闭事件处理"""
+        # 阻止窗口关闭，改为隐藏
+        self.Hide()
         
     def on_moving(self, event):
+        """移动事件处理"""
         # 阻止窗口移动
         self.SetPosition((0, 0))
 
     def on_text(self, event):
+        """文本输入事件处理"""
         # 检查输入是否正确
         if self.input.GetValue() == "123456789":
             self.Hide()
@@ -128,10 +136,11 @@ class RestScreen(wx.Frame):
                 self.on_early_exit()
             
     def on_enter(self, event):
+        """回车键事件处理"""
         # 回车时检查输入
         if self.input.GetValue() != "123456789":
             self.input.SetValue("")
-            self.hint.SetLabel("输入错误,请重试")
+            self.hint.SetLabel("输入错误,请重试\n按快捷键可重置休息时间")
             
     def reset_timer(self):
         """重置休息时间，带有冷却保护"""
