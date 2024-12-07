@@ -1,1 +1,1 @@
-pyinstaller --onefile -w  --clean .\src\main.py
+pyinstaller --onefile -w --name eye --clean .\src\main.py
