@@ -2,10 +2,10 @@ import wx
 import wx.adv
 import threading
 import time
-import keyboard
 from lib.rest_screen import RestScreen
 from lib.taskbar import TaskBarIcon
 from lib.config import Config
+from lib.hotkey_manager import HotkeyManager
 
 class MainFrame(wx.Frame):
     def __init__(self):
@@ -19,6 +19,9 @@ class MainFrame(wx.Frame):
         
         # 创建系统托盘图标
         self.taskbar_icon = TaskBarIcon(self)
+        
+        # 初始化热键管理器
+        self.hotkey_manager = HotkeyManager()
         
         self._init_ui()
         self._init_hotkey()
@@ -85,11 +88,11 @@ class MainFrame(wx.Frame):
         panel.SetSizer(vbox)
 
     def _init_hotkey(self):
+        """初始化全局热键"""
         try:
-            keyboard.remove_hotkey(self.config.hotkey)
-        except:
-            pass
-        keyboard.add_hotkey(self.config.hotkey, self.on_force_rest)
+            self.hotkey_manager.register_hotkey(self.config.hotkey, self.on_force_rest)
+        except Exception as e:
+            wx.MessageBox(f"初始化热键失败: {str(e)}", "错误")
 
     def on_rest_early_exit(self):
         """处理提前退出休息的回调"""
@@ -184,27 +187,25 @@ class MainFrame(wx.Frame):
         new_hotkey = self.hotkey_text.GetValue().strip()
         if new_hotkey:
             try:
-                # 先移除旧的热键
-                keyboard.remove_hotkey(self.config.hotkey)
-                # 尝试注册新的热键
-                keyboard.add_hotkey(new_hotkey, self.on_force_rest)
-                # 注册成功后更新配置
+                # 注册新热键
+                self.hotkey_manager.register_hotkey(new_hotkey, self.on_force_rest)
+                
+                # 更新配置
                 self.config.hotkey = new_hotkey
                 self.config.save()
+                
                 wx.MessageBox("快捷键设置成功", "提示")
             except Exception as e:
                 wx.MessageBox(f"快捷键设置失败: {str(e)}", "错误")
-                # 恢复旧的热键
-                keyboard.add_hotkey(self.config.hotkey, self.on_force_rest)
+                # 恢复原来的热键
                 self.hotkey_text.SetValue(self.config.hotkey)
                 
     def on_close(self, event):
         if self.real_close:  # 如果是真正的关闭操作
             self.is_running = False  # 停止计时器线程
-            try:
-                keyboard.remove_hotkey(self.config.hotkey)  # 移除热键
-            except:
-                pass
+            if self.hotkey_manager:
+                self.hotkey_manager.stop()  # 停止热键监听
+                self.hotkey_manager = None
             self.taskbar_icon.Destroy()
             self.rest_screen.Destroy()
             event.Skip()
