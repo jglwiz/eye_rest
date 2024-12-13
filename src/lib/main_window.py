@@ -120,9 +120,9 @@ class MainFrame(wx.Frame):
                     self.timer_thread.start()
             
             if self.is_resting:
-                # 如果当前正在休息，重置休息计时器
-                wx.CallAfter(self.rest_screen.reset_timer)
-                self.rest_end_time = time.time() + self.config.rest_time * 60
+                # 如果当前正在休息，增加1分钟休息时间
+                self.rest_end_time += 60  # 增加60秒
+                wx.CallAfter(self.rest_screen.reset_timer)  # 更新显示
             else:
                 # 开始新的休息
                 self.start_rest()
