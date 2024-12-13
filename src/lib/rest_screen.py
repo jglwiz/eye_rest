@@ -23,9 +23,9 @@ class RestScreen(wx.Frame):
         self.rest_seconds = rest_minutes * 60
         self.remaining_seconds = self.rest_seconds
         
-        # 添加重置保护标志
-        self.last_reset_time = 0
-        self.reset_cooldown = 2  # 重置冷却时间(秒)
+        # 添加增加时间保护标志
+        self.last_add_time = 0
+        self.add_cooldown = 2  # 增加时间的冷却时间(秒)
         
         # 创建主面板
         panel = wx.Panel(self)
@@ -44,7 +44,7 @@ class RestScreen(wx.Frame):
         self.countdown_text.SetFont(countdown_font)
         
         # 添加提示文本
-        self.hint = wx.StaticText(panel, label="请输入123456789以解锁\n按快捷键可重置休息时间", style=wx.ALIGN_CENTER)
+        self.hint = wx.StaticText(panel, label="请输入123456789以解锁\n按快捷键可增加1分钟休息时间", style=wx.ALIGN_CENTER)
         self.hint.SetForegroundColour(wx.WHITE)
         hint_font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.hint.SetFont(hint_font)
@@ -143,16 +143,16 @@ class RestScreen(wx.Frame):
             self.hint.SetLabel("输入错误,请重试\n按快捷键可重置休息时间")
             
     def reset_timer(self):
-        """重置休息时间，带有冷却保护"""
+        """增加休息时间，带有冷却保护"""
         current_time = time.time()
         # 检查是否在冷却时间内
-        if current_time - self.last_reset_time < self.reset_cooldown:
-            self.hint.SetLabel(f"请等待{self.reset_cooldown}秒后再重置\n请输入123456789以解锁")
+        if current_time - self.last_add_time < self.add_cooldown:
+            self.hint.SetLabel(f"请等待{self.add_cooldown}秒后再增加时间\n请输入123456789以解锁")
             return False
             
-        # 重置时间
-        self.remaining_seconds = self.rest_seconds
-        self.last_reset_time = current_time
+        # 增加1分钟
+        self.remaining_seconds += 60
+        self.last_add_time = current_time
         self.update_display()
-        self.hint.SetLabel("休息时间已重置\n请输入123456789以解锁")
+        self.hint.SetLabel("已增加1分钟休息时间\n请输入123456789以解锁")
         return True
