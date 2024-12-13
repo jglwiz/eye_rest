@@ -36,3 +36,5 @@ wheels/
 .DS_Store
 Thumbs.db
 *.log
+.aider*
+.env
