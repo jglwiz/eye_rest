@@ -25,7 +25,7 @@ class RestScreen(wx.Frame):
         
         # 添加增加时间保护标志
         self.last_add_time = 0
-        self.add_cooldown = 2  # 增加时间的冷却时间(秒)
+        self.add_cooldown = 0.5  # 增加时间的冷却时间(秒)
         
         # 创建主面板
         panel = wx.Panel(self)
