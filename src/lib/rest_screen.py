@@ -1,6 +1,10 @@
 import wx
 import time
 import winsound
+import win32gui
+import win32con
+import win32api
+import win32com.client
 from datetime import datetime
 
 class RestScreen(wx.Frame):
@@ -13,6 +17,9 @@ class RestScreen(wx.Frame):
         
         # 配置对象
         self.config = None
+        
+        # 设置窗口扩展样式
+        self._set_window_style()
         
         # 回调函数
         self.on_rest_complete = None  # 休息完成回调
@@ -97,9 +104,14 @@ class RestScreen(wx.Frame):
         self.on_rest_complete = on_complete
         self.on_rest_cancel = on_cancel
         self.is_resting = True
+        
+        def show_and_setup():
+            self.Show()
+            self.Maximize(True)
+            self._set_window_style()  # 确保窗口在所有虚拟桌面上显示
+        
         # 确保所有UI操作在主线程中执行
-        wx.CallAfter(self.Show)
-        wx.CallAfter(self.Maximize, True)
+        wx.CallAfter(show_and_setup)
         
         # 根据配置更新提示信息
         if self.config and self.config.allow_password_skip:
@@ -170,10 +182,46 @@ class RestScreen(wx.Frame):
             return
         event.Skip()
         
+    def _set_window_style(self):
+        """设置窗口扩展样式，使其在所有虚拟桌面上显示"""
+        try:
+            # 获取窗口句柄
+            hwnd = self.GetHandle()
+            
+            # 获取当前窗口样式
+            style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            
+            # 添加置顶和工具窗口样式
+            style |= win32con.WS_EX_TOPMOST
+            style |= win32con.WS_EX_TOOLWINDOW
+            
+            # 应用新样式
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, style)
+            
+            # 设置窗口位置为顶层
+            win32gui.SetWindowPos(
+                hwnd,
+                win32con.HWND_TOPMOST,
+                0, 0, 0, 0,
+                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
+            )
+            
+            # 尝试设置虚拟桌面固定属性
+            try:
+                # 使用 Windows 10+ 的虚拟桌面 API
+                shell = win32com.client.Dispatch("Shell.Application")
+                shell.PinToAllVirtualDesktops(hwnd, True)
+            except:
+                pass  # 如果 API 不可用，静默失败
+                
+        except Exception as e:
+            print(f"设置窗口样式失败: {str(e)}")
+
     def on_show(self, event):
         """显示事件处理"""
         if event.IsShown():
             self.Maximize(True)
+            self._set_window_style()  # 确保窗口样式正确设置
             self.input.SetFocus()
         event.Skip()
         
@@ -184,8 +232,18 @@ class RestScreen(wx.Frame):
         
     def on_moving(self, event):
         """移动事件处理"""
-        # 阻止窗口移动
-        self.SetPosition((0, 0))
+        # 获取所有显示器
+        displays = [wx.Display(i) for i in range(wx.Display.GetCount())]
+        
+        # 遍历所有显示器并设置窗口
+        for display in displays:
+            geometry = display.GetGeometry()
+            # 创建一个全屏窗口在每个显示器上
+            self.SetPosition((geometry.x, geometry.y))
+            self.SetSize(geometry.GetSize())
+            
+        # 重新应用窗口样式确保置顶和虚拟桌面固定
+        self._set_window_style()
 
     def on_text(self, event):
         """文本输入事件处理"""
