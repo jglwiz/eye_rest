@@ -4,13 +4,19 @@ import winsound
 from datetime import datetime
 
 class RestScreen(wx.Frame):
-    def __init__(self, rest_minutes=20, on_early_exit=None):
-        # 创建全屏无边框窗口，始终置顶
+    """休息界面，负责管理休息时间和UI显示"""
+    
+    def __init__(self):
+        """初始化休息界面"""
         style = (wx.FRAME_NO_TASKBAR | wx.STAY_ON_TOP | wx.BORDER_NONE)
         super().__init__(None, style=style)
         
-        # 保存回调函数
-        self.on_early_exit = on_early_exit
+        # 回调函数
+        self.on_rest_complete = None  # 休息完成回调
+        self.on_rest_cancel = None    # 休息取消回调
+        
+        # 状态标志
+        self.is_resting = False
         
         # 获取屏幕大小并设置窗口
         self.screen = wx.Display().GetGeometry()
@@ -20,26 +26,24 @@ class RestScreen(wx.Frame):
         # 设置黑色背景
         self.SetBackgroundColour(wx.BLACK)
         
-        # 初始化休息时间（分钟转换为秒）
-        self.rest_seconds = rest_minutes * 10
-        self.remaining_seconds = self.rest_seconds
-        
-        # 添加增加时间保护标志
-        self.last_add_time = 0
-        self.add_cooldown = 0.05 # 增加时间的冷却时间(秒)
+        # 计时相关
+        self.rest_seconds = 0      # 总休息时间（秒）
+        self.remaining_seconds = 0  # 剩余时间（秒）
+        self.last_add_time = 0     # 上次增加时间的时间戳
+        self.add_cooldown = 1      # 增加时间的冷却时间（秒）
         
         # 创建主面板
         panel = wx.Panel(self)
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 添加当前时间显示
-        self.time_text = wx.StaticText(panel, label="", style=wx.ALIGN_CENTER)
+        self.time_text = wx.StaticText(panel, label="                  ", style=wx.ALIGN_CENTER)
         self.time_text.SetForegroundColour(wx.WHITE)
         time_font = wx.Font(48, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.time_text.SetFont(time_font)
         
         # 添加倒计时显示
-        self.countdown_text = wx.StaticText(panel, label="", style=wx.ALIGN_CENTER)
+        self.countdown_text = wx.StaticText(panel, label="                  ", style=wx.ALIGN_CENTER) 
         self.countdown_text.SetForegroundColour(wx.WHITE)
         countdown_font = wx.Font(48, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.countdown_text.SetFont(countdown_font)
@@ -75,7 +79,42 @@ class RestScreen(wx.Frame):
         # 创建定时器
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_timer)
+    
+    def start_rest(self, minutes, on_complete=None, on_cancel=None):
+        """开始休息
+        Args:
+            minutes: 休息时间（分钟）
+            on_complete: 休息完成时的回调函数
+            on_cancel: 休息被取消时的回调函数
+        """
+        self.rest_seconds = minutes * 60
+        self.remaining_seconds = self.rest_seconds
+        self.on_rest_complete = on_complete
+        self.on_rest_cancel = on_cancel
+        self.is_resting = True
+        # 确保所有UI操作在主线程中执行
+        wx.CallAfter(self.Show)
+        wx.CallAfter(self.Maximize, True)
+        wx.CallAfter(self.input.SetFocus)
+        wx.CallAfter(self.timer.Start, 1000)
         
+    def stop_rest(self, cancelled=False):
+        """停止休息
+        Args:
+            cancelled: 是否是被取消的（True表示提前退出，False表示正常完成）
+        """
+        self.is_resting = False
+        # 确保所有UI操作在主线程中执行
+        wx.CallAfter(self.timer.Stop)
+        wx.CallAfter(self.Hide)
+        wx.CallAfter(self.input.SetValue, "")
+        
+        # 在主线程中调用回调函数
+        if cancelled and self.on_rest_cancel:
+            wx.CallAfter(self.on_rest_cancel)
+        elif not cancelled and self.on_rest_complete:
+            wx.CallAfter(self.on_rest_complete)
+            
     def update_display(self):
         """更新显示内容"""
         # 更新当前时间
@@ -85,25 +124,27 @@ class RestScreen(wx.Frame):
         # 更新倒计时
         minutes = self.remaining_seconds // 60
         seconds = self.remaining_seconds % 60
-        self.countdown_text.SetLabel(f"休息时间还剩: {minutes:02d}:{seconds:02d}")
+        self.countdown_text.SetLabel(f"剩余时间: {minutes:02d}:{seconds:02d}")
         
     def on_timer(self, event):
         """定时器回调"""
+        if not self.is_resting:
+            return
+            
         if self.remaining_seconds > 0:
-            # 在剩余5秒时播放提示音
+            # 在剩余10秒时播放提示音
             if self.remaining_seconds == 10:
                 # 使用更温和的声音频率和持续时间
-                winsound.Beep(600, 300)  # 600Hz, 持续300毫秒
+                winsound.Beep(500, 200)  # 600Hz, 持续200毫秒
+                time.sleep(0.1)  # 短暂停顿
+                winsound.Beep(700, 200)  # 800Hz, 持续200毫秒
                 time.sleep(0.1)  # 短暂停顿
                 winsound.Beep(800, 200)  # 800Hz, 持续200毫秒
             self.remaining_seconds -= 1
             self.update_display()
         else:
-            # 时间结束，自动隐藏窗口并调用回调
-            self.Hide()
-            self.input.SetValue("")
-            if self.on_early_exit:
-                self.on_early_exit()
+            # 休息完成
+            self.stop_rest(cancelled=False)
         
     def on_key(self, event):
         """按键事件处理"""
@@ -117,15 +158,6 @@ class RestScreen(wx.Frame):
         if event.IsShown():
             self.Maximize(True)
             self.input.SetFocus()
-            # 重置倒计时
-            self.remaining_seconds = self.rest_seconds
-            # 重置上次重置时间
-            self.last_reset_time = time.time()
-            # 启动定时器
-            self.timer.Start(1000)
-        else:
-            # 停止定时器
-            self.timer.Stop()
         event.Skip()
         
     def on_close(self, event):
@@ -142,11 +174,7 @@ class RestScreen(wx.Frame):
         """文本输入事件处理"""
         # 检查输入是否正确
         if self.input.GetValue() == "123456789123456789123456789":
-            self.Hide()
-            self.input.SetValue("")
-            # 调用回调函数通知提前退出
-            if self.on_early_exit:
-                self.on_early_exit()
+            self.stop_rest(cancelled=True)
             
     def on_enter(self, event):
         """回车键事件处理"""
@@ -157,6 +185,9 @@ class RestScreen(wx.Frame):
             
     def reset_timer(self):
         """增加休息时间，带有冷却保护"""
+        if not self.is_resting:
+            return False
+            
         current_time = time.time()
         # 检查是否在冷却时间内
         if current_time - self.last_add_time < self.add_cooldown:

@@ -13,8 +13,8 @@ class MainFrame(wx.Frame):
         
         self.config = Config()
         self.is_running = False  # 是否开启提醒
-        self.is_resting = False  # 是否在休息状态
-        self.rest_screen = RestScreen(self.config.rest_time, self.on_rest_early_exit)  # 创建单例RestScreen
+        self.is_working = True   # 是否在工作状态
+        self.rest_screen = RestScreen()  # 创建休息窗口
         self.real_close = False
         
         # 创建系统托盘图标
@@ -33,10 +33,8 @@ class MainFrame(wx.Frame):
         # 添加线程锁
         self.thread_lock = threading.Lock()
         
-        # 添加工作结束时间变量
+        # 工作结束时间
         self.work_end_time = time.time()
-        # 添加休息结束时间变量
-        self.rest_end_time = time.time()
         
         # 绑定关闭事件
         self.Bind(wx.EVT_CLOSE, self.on_close)
@@ -94,19 +92,31 @@ class MainFrame(wx.Frame):
         except Exception as e:
             wx.MessageBox(f"初始化热键失败: {str(e)}", "错误")
 
-    def on_rest_early_exit(self):
-        """处理提前退出休息的回调"""
+    def on_rest_complete(self):
+        """休息完成回调"""
         with self.thread_lock:
-            self.is_resting = False
+            self.is_working = True
+            # 设置下一个工作结束时间
+            self.work_end_time = time.time() + self.config.work_time * 60
+            wx.CallAfter(self.status.SetLabel, "工作中")
+
+    def on_rest_cancel(self):
+        """休息取消回调"""
+        with self.thread_lock:
+            self.is_working = True
             # 重置工作计时
             self.work_end_time = time.time() + self.config.work_time * 60
+            wx.CallAfter(self.status.SetLabel, "工作中")
 
     def start_rest(self):
         """开始休息"""
-        self.is_resting = True
-        self.rest_end_time = time.time() + self.config.rest_time * 60
-        wx.CallAfter(self.rest_screen.Show)
-        wx.CallAfter(self.rest_screen.Maximize, True)
+        self.is_working = False
+        # 确保在主线程中执行UI操作
+        wx.CallAfter(self.rest_screen.start_rest,
+            self.config.rest_time,
+            on_complete=self.on_rest_complete,
+            on_cancel=self.on_rest_cancel
+        )
         wx.CallAfter(self.status.SetLabel, "休息时间")
 
     def on_force_rest(self, event=None):
@@ -119,10 +129,9 @@ class MainFrame(wx.Frame):
                 if not self.timer_thread.is_alive():
                     self.timer_thread.start()
             
-            if self.is_resting:
+            if not self.is_working:
                 # 如果当前正在休息，增加1分钟休息时间
-                self.rest_end_time += 60  # 增加60秒
-                wx.CallAfter(self.rest_screen.reset_timer)  # 更新显示
+                wx.CallAfter(self.rest_screen.reset_timer)
             else:
                 # 开始新的休息
                 self.start_rest()
@@ -135,6 +144,7 @@ class MainFrame(wx.Frame):
                 self.config.rest_time = self.rest_spin.GetValue()
                 self.config.save()  # 保存配置
                 self.is_running = True
+                self.is_working = True
                 self.toggle_btn.SetLabel("停止")
                 # 设置初始工作结束时间
                 self.work_end_time = time.time() + self.config.work_time * 60
@@ -144,35 +154,21 @@ class MainFrame(wx.Frame):
             else:
                 # 停止计时
                 self.is_running = False
-                self.is_resting = False
+                self.is_working = True
                 self.toggle_btn.SetLabel("开始")
                 self.status.SetLabel("就绪")
-                self.rest_screen.Hide()
+                self.rest_screen.stop_rest(cancelled=True)
             
     def timer_func(self):
-        """永久运行的计时器线程，根据状态切换工作/休息模式"""
+        """永久运行的计时器线程，只负责工作时间管理"""
         while True:
             with self.thread_lock:
                 if not self.is_running:
                     time.sleep(0.5)
                     continue
                     
-                current_time = time.time()
-                
-                if self.is_resting:
-                    # 休息状态
-                    if current_time >= self.rest_end_time:
-                        # 休息结束
-                        wx.CallAfter(self.rest_screen.Hide)
-                        self.is_resting = False
-                        # 设置下一个工作结束时间
-                        self.work_end_time = current_time + self.config.work_time * 60
-                    else:
-                        remaining = int(self.rest_end_time - current_time)
-                        if remaining > 0:
-                            wx.CallAfter(self.status.SetLabel, f"休息中: 还剩 {remaining//60}:{remaining%60:02d}")
-                else:
-                    # 工作状态
+                if self.is_working:
+                    current_time = time.time()
                     if current_time >= self.work_end_time:
                         # 工作结束，开始休息
                         self.start_rest()
