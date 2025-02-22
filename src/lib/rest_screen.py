@@ -11,6 +11,9 @@ class RestScreen(wx.Frame):
         style = (wx.FRAME_NO_TASKBAR | wx.STAY_ON_TOP | wx.BORDER_NONE)
         super().__init__(None, style=style)
         
+        # 配置对象
+        self.config = None
+        
         # 回调函数
         self.on_rest_complete = None  # 休息完成回调
         self.on_rest_cancel = None    # 休息取消回调
@@ -49,7 +52,7 @@ class RestScreen(wx.Frame):
         self.countdown_text.SetFont(countdown_font)
         
         # 添加提示文本
-        self.hint = wx.StaticText(panel, label="请输入123456789以解锁\n按快捷键可增加1分钟休息时间", style=wx.ALIGN_CENTER)
+        self.hint = wx.StaticText(panel, label="按快捷键可增加1分钟休息时间", style=wx.ALIGN_CENTER)
         self.hint.SetForegroundColour(wx.WHITE)
         hint_font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.hint.SetFont(hint_font)
@@ -80,13 +83,15 @@ class RestScreen(wx.Frame):
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_timer)
     
-    def start_rest(self, minutes, on_complete=None, on_cancel=None):
+    def start_rest(self, minutes, on_complete=None, on_cancel=None, config=None):
         """开始休息
         Args:
             minutes: 休息时间（分钟）
             on_complete: 休息完成时的回调函数
             on_cancel: 休息被取消时的回调函数
+            config: 配置对象
         """
+        self.config = config
         self.rest_seconds = minutes * 60
         self.remaining_seconds = self.rest_seconds
         self.on_rest_complete = on_complete
@@ -95,6 +100,13 @@ class RestScreen(wx.Frame):
         # 确保所有UI操作在主线程中执行
         wx.CallAfter(self.Show)
         wx.CallAfter(self.Maximize, True)
+        
+        # 根据配置更新提示信息
+        if self.config and self.config.allow_password_skip:
+            wx.CallAfter(self.hint.SetLabel, "请输入123456789以解锁\n按快捷键可增加1分钟休息时间")
+        else:
+            wx.CallAfter(self.hint.SetLabel, "按快捷键可增加1分钟休息时间")
+            
         wx.CallAfter(self.input.SetFocus)
         wx.CallAfter(self.timer.Start, 1000)
         
@@ -132,18 +144,23 @@ class RestScreen(wx.Frame):
             return
             
         if self.remaining_seconds > 0:
-            # 在剩余10秒时播放提示音
-            if self.remaining_seconds == 10:
-                # 使用更温和的声音频率和持续时间
-                winsound.Beep(500, 200)  # 600Hz, 持续200毫秒
+            # 在剩余10秒时播放doremi音阶
+            if self.remaining_seconds == 10 and self.config and self.config.play_sound_after_rest:
+                # 播放do-re-mi音阶
+                winsound.Beep(523, 200)  # do (C5)
                 time.sleep(0.1)  # 短暂停顿
-                winsound.Beep(700, 200)  # 800Hz, 持续200毫秒
+                winsound.Beep(587, 200)  # re (D5)
                 time.sleep(0.1)  # 短暂停顿
-                winsound.Beep(800, 200)  # 800Hz, 持续200毫秒
+                winsound.Beep(659, 200)  # mi (E5)
+                time.sleep(0.1)
+                winsound.Beep(784, 200)  # G5
+                time.sleep(0.1)
+                winsound.Beep(659, 200)  # E5
+                time.sleep(0.1)
+                winsound.Beep(523, 400)  # C5
             self.remaining_seconds -= 1
             self.update_display()
         else:
-            # 休息完成
             self.stop_rest(cancelled=False)
         
     def on_key(self, event):
@@ -172,12 +189,22 @@ class RestScreen(wx.Frame):
 
     def on_text(self, event):
         """文本输入事件处理"""
+        # 如果不允许密码解锁，直接返回
+        if not self.config or not self.config.allow_password_skip:
+            return
+            
         # 检查输入是否正确
         if self.input.GetValue() == "123456789123456789123456789":
             self.stop_rest(cancelled=True)
             
     def on_enter(self, event):
         """回车键事件处理"""
+        # 如果不允许密码解锁，显示提示
+        if not self.config or not self.config.allow_password_skip:
+            self.input.SetValue("")
+            self.hint.SetLabel("当前不允许使用密码提前结束休息\n按快捷键可重置休息时间")
+            return
+            
         # 回车时检查输入
         if self.input.GetValue() != "123456789123456789123456789":
             self.input.SetValue("")
@@ -191,12 +218,18 @@ class RestScreen(wx.Frame):
         current_time = time.time()
         # 检查是否在冷却时间内
         if current_time - self.last_add_time < self.add_cooldown:
-            self.hint.SetLabel(f"请等待{self.add_cooldown}秒后再增加时间\n请输入123456789以解锁")
+            if self.config and self.config.allow_password_skip:
+                self.hint.SetLabel(f"请等待{self.add_cooldown}秒后再增加时间\n请输入123456789以解锁")
+            else:
+                self.hint.SetLabel(f"请等待{self.add_cooldown}秒后再增加时间")
             return False
             
         # 增加1分钟
         self.remaining_seconds += 60
         self.last_add_time = current_time
         self.update_display()
-        self.hint.SetLabel("已增加1分钟休息时间\n请输入三遍123456789以解锁")
+        if self.config and self.config.allow_password_skip:
+            self.hint.SetLabel("已增加1分钟休息时间\n请输入三遍123456789以解锁")
+        else:
+            self.hint.SetLabel("已增加1分钟休息时间")
         return True

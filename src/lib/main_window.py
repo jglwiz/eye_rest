@@ -47,7 +47,7 @@ class MainFrame(wx.Frame):
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 添加配置控件
-        grid = wx.FlexGridSizer(3, 2, 5, 5)
+        grid = wx.FlexGridSizer(5, 2, 5, 5)
         grid.Add(wx.StaticText(panel, label="工作时间(分钟):"))
         self.work_spin = wx.SpinCtrl(panel, value=str(self.config.work_time))
         grid.Add(self.work_spin)
@@ -65,6 +65,17 @@ class MainFrame(wx.Frame):
         hotkey_box.Add(self.hotkey_text, 1, wx.RIGHT, 5)
         hotkey_box.Add(self.hotkey_btn, 0)
         grid.Add(hotkey_box)
+
+        # 添加声音和密码选项
+        grid.Add(wx.StaticText(panel, label="休息结束时播放声音:"))
+        self.sound_checkbox = wx.CheckBox(panel)
+        self.sound_checkbox.SetValue(self.config.play_sound_after_rest)
+        grid.Add(self.sound_checkbox)
+
+        grid.Add(wx.StaticText(panel, label="允许密码提前结束休息:"))
+        self.password_checkbox = wx.CheckBox(panel)
+        self.password_checkbox.SetValue(self.config.allow_password_skip)
+        grid.Add(self.password_checkbox)
         
         # 添加开始/停止按钮
         self.toggle_btn = wx.Button(panel, label="开始")
@@ -115,7 +126,8 @@ class MainFrame(wx.Frame):
         wx.CallAfter(self.rest_screen.start_rest,
             self.config.rest_time,
             on_complete=self.on_rest_complete,
-            on_cancel=self.on_rest_cancel
+            on_cancel=self.on_rest_cancel,
+            config=self.config
         )
         wx.CallAfter(self.status.SetLabel, "休息时间")
 
@@ -142,6 +154,8 @@ class MainFrame(wx.Frame):
                 # 开始计时
                 self.config.work_time = self.work_spin.GetValue()
                 self.config.rest_time = self.rest_spin.GetValue()
+                self.config.play_sound_after_rest = self.sound_checkbox.GetValue()
+                self.config.allow_password_skip = self.password_checkbox.GetValue()
                 self.config.save()  # 保存配置
                 self.is_running = True
                 self.is_working = True
