@@ -25,7 +25,7 @@ class RestScreen(wx.Frame):
         
         # 添加增加时间保护标志
         self.last_add_time = 0
-        self.add_cooldown = 0.1 # 增加时间的冷却时间(秒)
+        self.add_cooldown = 0.05 # 增加时间的冷却时间(秒)
         
         # 创建主面板
         panel = wx.Panel(self)
@@ -128,7 +128,7 @@ class RestScreen(wx.Frame):
     def on_text(self, event):
         """文本输入事件处理"""
         # 检查输入是否正确
-        if self.input.GetValue() == "123456789123456789":
+        if self.input.GetValue() == "123456789123456789123456789":
             self.Hide()
             self.input.SetValue("")
             # 调用回调函数通知提前退出
@@ -138,7 +138,7 @@ class RestScreen(wx.Frame):
     def on_enter(self, event):
         """回车键事件处理"""
         # 回车时检查输入
-        if self.input.GetValue() != "123456789123456789":
+        if self.input.GetValue() != "123456789123456789123456789":
             self.input.SetValue("")
             self.hint.SetLabel("输入错误,请重试\n按快捷键可重置休息时间")
             
@@ -154,5 +154,5 @@ class RestScreen(wx.Frame):
         self.remaining_seconds += 60
         self.last_add_time = current_time
         self.update_display()
-        self.hint.SetLabel("已增加1分钟休息时间\n请输入两遍123456789以解锁")
+        self.hint.SetLabel("已增加1分钟休息时间\n请输入三遍123456789以解锁")
         return True
