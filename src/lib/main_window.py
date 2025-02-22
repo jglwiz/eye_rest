@@ -9,7 +9,7 @@ from lib.hotkey_manager import HotkeyManager
 
 class MainFrame(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="护眼助手", size=(300, 250))
+        super().__init__(None, title="护眼助手", size=(350, 300))
         
         self.config = Config()
         self.is_running = False  # 是否开启提醒
