@@ -1,5 +1,6 @@
 import wx
 import time
+import winsound
 from datetime import datetime
 
 class RestScreen(wx.Frame):
@@ -19,8 +20,8 @@ class RestScreen(wx.Frame):
         # 设置黑色背景
         self.SetBackgroundColour(wx.BLACK)
         
-        # 初始化休息时间
-        self.rest_seconds = rest_minutes * 60
+        # 初始化休息时间（分钟转换为秒）
+        self.rest_seconds = rest_minutes * 10
         self.remaining_seconds = self.rest_seconds
         
         # 添加增加时间保护标志
@@ -89,8 +90,20 @@ class RestScreen(wx.Frame):
     def on_timer(self, event):
         """定时器回调"""
         if self.remaining_seconds > 0:
+            # 在剩余5秒时播放提示音
+            if self.remaining_seconds == 10:
+                # 使用更温和的声音频率和持续时间
+                winsound.Beep(600, 300)  # 600Hz, 持续300毫秒
+                time.sleep(0.1)  # 短暂停顿
+                winsound.Beep(800, 200)  # 800Hz, 持续200毫秒
             self.remaining_seconds -= 1
-        self.update_display()
+            self.update_display()
+        else:
+            # 时间结束，自动隐藏窗口并调用回调
+            self.Hide()
+            self.input.SetValue("")
+            if self.on_early_exit:
+                self.on_early_exit()
         
     def on_key(self, event):
         """按键事件处理"""
