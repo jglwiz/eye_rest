@@ -1,5 +1,6 @@
 import wx
 import wx.adv
+from .app_states import AppState
 
 class TaskBarIcon(wx.adv.TaskBarIcon):
     def __init__(self, frame):
@@ -26,3 +27,14 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
     def on_exit(self, event):
         self.frame.real_close = True
         self.frame.Close()
+
+    def update_icon_by_state(self, state):
+        """根据状态更新托盘图标"""
+        status_map = {
+            AppState.IDLE: "就绪",
+            AppState.WORKING: "工作中", 
+            AppState.RESTING: "休息中",
+            AppState.AWAY: "用户离开"
+        }
+        status_text = status_map.get(state, "未知状态")
+        self.SetIcon(wx.Icon(wx.ArtProvider.GetBitmap(wx.ART_TIP, size=(16, 16))), f"护眼助手 - {status_text}")

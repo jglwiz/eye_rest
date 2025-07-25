@@ -37,7 +37,7 @@ class MainFrame(wx.Frame):
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 添加配置控件
-        grid = wx.FlexGridSizer(5, 2, 5, 5)
+        grid = wx.FlexGridSizer(7, 2, 5, 5)
         grid.Add(wx.StaticText(panel, label="工作时间(分钟):"))
         self.work_spin = wx.SpinCtrl(panel, value=str(self.core.config.work_time))
         grid.Add(self.work_spin)
@@ -45,6 +45,16 @@ class MainFrame(wx.Frame):
         grid.Add(wx.StaticText(panel, label="休息时间(分钟):"))
         self.rest_spin = wx.SpinCtrl(panel, value=str(self.core.config.rest_time))
         grid.Add(self.rest_spin)
+        
+        # 添加空闲检测配置
+        grid.Add(wx.StaticText(panel, label="启用离开检测:"))
+        self.idle_detection_checkbox = wx.CheckBox(panel)
+        self.idle_detection_checkbox.SetValue(self.core.config.idle_detection_enabled)
+        grid.Add(self.idle_detection_checkbox)
+        
+        grid.Add(wx.StaticText(panel, label="离开检测时间(分钟):"))
+        self.idle_threshold_spin = wx.SpinCtrl(panel, value=str(self.core.config.idle_threshold_minutes), min=1, max=30)
+        grid.Add(self.idle_threshold_spin)
         
         # 添加快捷键配置
         grid.Add(wx.StaticText(panel, label="提前休息快捷键:"))
@@ -89,6 +99,9 @@ class MainFrame(wx.Frame):
     def on_status_change(self, status):
         """状态变化回调 - 更新UI显示"""
         self.status.SetLabel(status)
+        # 更新托盘图标状态
+        if hasattr(self.core, 'current_state'):
+            self.taskbar_icon.update_icon_by_state(self.core.current_state)
 
     def on_start_rest(self, rest_minutes):
         """开始休息回调 - 显示休息界面"""
@@ -115,6 +128,10 @@ class MainFrame(wx.Frame):
             play_sound = self.sound_checkbox.GetValue()
             allow_password = self.password_checkbox.GetValue()
             
+            # 保存空闲检测配置
+            self.core.config.idle_detection_enabled = self.idle_detection_checkbox.GetValue()
+            self.core.config.idle_threshold_minutes = self.idle_threshold_spin.GetValue()
+            
             self.core.start_work_session(work_time, rest_time, play_sound, allow_password)
             self.toggle_btn.SetLabel("停止")
             self.Hide()
@@ -130,6 +147,10 @@ class MainFrame(wx.Frame):
             rest_time = self.rest_spin.GetValue()
             play_sound = self.sound_checkbox.GetValue()
             allow_password = self.password_checkbox.GetValue()
+            
+            # 保存空闲检测配置
+            self.core.config.idle_detection_enabled = self.idle_detection_checkbox.GetValue()
+            self.core.config.idle_threshold_minutes = self.idle_threshold_spin.GetValue()
             
             self.core.start_work_session(work_time, rest_time, play_sound, allow_password)
             self.toggle_btn.SetLabel("停止")

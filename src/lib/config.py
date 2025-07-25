@@ -9,7 +9,9 @@ class Config:
             "rest_time": 1,
             "hotkey": "ctrl+shift+r",
             "play_sound_after_rest": True,
-            "allow_password_skip": False
+            "allow_password_skip": False,
+            "idle_detection_enabled": True,
+            "idle_threshold_minutes": 2
         }
         self.load()
 
@@ -23,6 +25,8 @@ class Config:
                     self.hotkey = config.get("hotkey", self.default_config["hotkey"])
                     self.play_sound_after_rest = config.get("play_sound_after_rest", self.default_config["play_sound_after_rest"])
                     self.allow_password_skip = config.get("allow_password_skip", self.default_config["allow_password_skip"])
+                    self.idle_detection_enabled = config.get("idle_detection_enabled", self.default_config["idle_detection_enabled"])
+                    self.idle_threshold_minutes = config.get("idle_threshold_minutes", self.default_config["idle_threshold_minutes"])
             except:
                 self._set_defaults()
         else:
@@ -34,6 +38,8 @@ class Config:
         self.hotkey = self.default_config["hotkey"]
         self.play_sound_after_rest = self.default_config["play_sound_after_rest"]
         self.allow_password_skip = self.default_config["allow_password_skip"]
+        self.idle_detection_enabled = self.default_config["idle_detection_enabled"]
+        self.idle_threshold_minutes = self.default_config["idle_threshold_minutes"]
 
     def save(self):
         config = {
@@ -41,7 +47,9 @@ class Config:
             "rest_time": self.rest_time,
             "hotkey": self.hotkey,
             "play_sound_after_rest": self.play_sound_after_rest,
-            "allow_password_skip": self.allow_password_skip
+            "allow_password_skip": self.allow_password_skip,
+            "idle_detection_enabled": self.idle_detection_enabled,
+            "idle_threshold_minutes": self.idle_threshold_minutes
         }
         with open(self.config_path, "w") as f:
             json.dump(config, f)
