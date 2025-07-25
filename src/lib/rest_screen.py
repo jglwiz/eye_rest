@@ -1,32 +1,23 @@
 import wx
-import time
-import winsound
 import win32gui
 import win32con
 import win32api
 import win32com.client
-from datetime import datetime
+from .rest_manager import RestManager
 
 class RestScreen(wx.Frame):
-    """休息界面，负责管理休息时间和UI显示"""
+    """休息界面，只负责UI显示"""
     
     def __init__(self):
         """初始化休息界面"""
         style = (wx.FRAME_NO_TASKBAR | wx.STAY_ON_TOP | wx.BORDER_NONE)
         super().__init__(None, style=style)
         
-        # 配置对象
-        self.config = None
+        # 创建休息管理器
+        self.rest_manager = RestManager()
         
         # 设置窗口扩展样式
         self._set_window_style()
-        
-        # 回调函数
-        self.on_rest_complete = None  # 休息完成回调
-        self.on_rest_cancel = None    # 休息取消回调
-        
-        # 状态标志
-        self.is_resting = False
         
         # 获取屏幕大小并设置窗口
         self.screen = wx.Display().GetGeometry()
@@ -36,12 +27,17 @@ class RestScreen(wx.Frame):
         # 设置黑色背景
         self.SetBackgroundColour(wx.BLACK)
         
-        # 计时相关
-        self.rest_seconds = 0      # 总休息时间（秒）
-        self.remaining_seconds = 0  # 剩余时间（秒）
-        self.last_add_time = 0     # 上次增加时间的时间戳
-        self.add_cooldown = 1      # 增加时间的冷却时间（秒）
+        # 创建UI组件
+        self._init_ui()
         
+        # 绑定事件
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+        self.Bind(wx.EVT_MOVING, self.on_moving)
+        self.Bind(wx.EVT_SHOW, self.on_show)
+        self.Bind(wx.EVT_CHAR_HOOK, self.on_key)
+        
+    def _init_ui(self):
+        """初始化UI组件"""
         # 创建主面板
         panel = wx.Panel(self)
         vbox = wx.BoxSizer(wx.VERTICAL)
@@ -79,101 +75,84 @@ class RestScreen(wx.Frame):
         vbox.Add(self.input, 0, wx.ALL|wx.ALIGN_CENTER, 5)
         vbox.AddSpacer(50)
         panel.SetSizer(vbox)
-        
-        # 绑定事件
-        self.Bind(wx.EVT_CLOSE, self.on_close)
-        self.Bind(wx.EVT_MOVING, self.on_moving)
-        self.Bind(wx.EVT_SHOW, self.on_show)
-        self.Bind(wx.EVT_CHAR_HOOK, self.on_key)
-        
-        # 创建定时器
-        self.timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, self.on_timer)
     
-    def start_rest(self, minutes, on_complete=None, on_cancel=None, config=None):
+    def start_rest(self, minutes, config=None, on_complete=None, on_cancel=None):
         """开始休息
         Args:
             minutes: 休息时间（分钟）
+            config: 配置对象
             on_complete: 休息完成时的回调函数
             on_cancel: 休息被取消时的回调函数
-            config: 配置对象
         """
-        self.config = config
-        self.rest_seconds = minutes * 60
-        self.remaining_seconds = self.rest_seconds
-        self.on_rest_complete = on_complete
-        self.on_rest_cancel = on_cancel
-        self.is_resting = True
+        # 设置休息管理器的回调
+        def on_update_display(data):
+            wx.CallAfter(self._update_display, data)
         
+        def on_rest_complete():
+            wx.CallAfter(self.Hide)
+            wx.CallAfter(self.input.SetValue, "")
+            if on_complete:
+                on_complete()
+        
+        def on_rest_cancel():
+            wx.CallAfter(self.Hide)
+            wx.CallAfter(self.input.SetValue, "")
+            if on_cancel:
+                on_cancel()
+        
+        # 启动休息管理器
+        self.rest_manager.start_rest(
+            minutes=minutes,
+            config=config,
+            on_complete=on_rest_complete,
+            on_cancel=on_rest_cancel,
+            on_update_display=on_update_display
+        )
+        
+        # 更新提示信息
+        hint_msg = self.rest_manager.get_hint_message()
+        wx.CallAfter(self.hint.SetLabel, hint_msg)
+        
+        # 显示窗口
         def show_and_setup():
             self.Show()
             self.Maximize(True)
-            self._set_window_style()  # 确保窗口在所有虚拟桌面上显示
+            self._set_window_style()
+            self.input.SetFocus()
         
-        # 确保所有UI操作在主线程中执行
         wx.CallAfter(show_and_setup)
-        
-        # 根据配置更新提示信息
-        if self.config and self.config.allow_password_skip:
-            wx.CallAfter(self.hint.SetLabel, "请输入123456789以解锁\n按快捷键可增加1分钟休息时间")
-        else:
-            wx.CallAfter(self.hint.SetLabel, "按快捷键可增加1分钟休息时间")
-            
-        wx.CallAfter(self.input.SetFocus)
-        wx.CallAfter(self.timer.Start, 1000)
         
     def stop_rest(self, cancelled=False):
         """停止休息
         Args:
             cancelled: 是否是被取消的（True表示提前退出，False表示正常完成）
         """
-        self.is_resting = False
-        # 确保所有UI操作在主线程中执行
-        wx.CallAfter(self.timer.Stop)
+        self.rest_manager.stop_rest(cancelled=cancelled)
         wx.CallAfter(self.Hide)
         wx.CallAfter(self.input.SetValue, "")
+    
+    def add_rest_time(self):
+        """增加休息时间"""
+        success, message = self.rest_manager.add_rest_time()
+        if success:
+            # 更新提示信息
+            hint_msg = self.rest_manager.get_hint_message()
+            wx.CallAfter(self.hint.SetLabel, hint_msg)
+        else:
+            # 显示错误信息
+            wx.CallAfter(self.hint.SetLabel, message)
+        return success
         
-        # 在主线程中调用回调函数
-        if cancelled and self.on_rest_cancel:
-            wx.CallAfter(self.on_rest_cancel)
-        elif not cancelled and self.on_rest_complete:
-            wx.CallAfter(self.on_rest_complete)
-            
-    def update_display(self):
-        """更新显示内容"""
+    def _update_display(self, data):
+        """更新显示内容
+        Args:
+            data: 包含显示数据的字典
+        """
         # 更新当前时间
-        current_time = datetime.now().strftime("%H:%M:%S")
-        self.time_text.SetLabel("当前时间: " + current_time)
+        self.time_text.SetLabel("当前时间: " + data['current_time'])
         
         # 更新倒计时
-        minutes = self.remaining_seconds // 60
-        seconds = self.remaining_seconds % 60
-        self.countdown_text.SetLabel(f"剩余时间: {minutes:02d}:{seconds:02d}")
-        
-    def on_timer(self, event):
-        """定时器回调"""
-        if not self.is_resting:
-            return
-            
-        if self.remaining_seconds > 0:
-            # 在剩余10秒时播放doremi音阶
-            if self.remaining_seconds == 10 and self.config and self.config.play_sound_after_rest:
-                # 播放do-re-mi音阶
-                winsound.Beep(523, 200)  # do (C5)
-                time.sleep(0.1)  # 短暂停顿
-                winsound.Beep(587, 200)  # re (D5)
-                time.sleep(0.1)  # 短暂停顿
-                winsound.Beep(659, 200)  # mi (E5)
-                time.sleep(0.1)
-                winsound.Beep(784, 200)  # G5
-                time.sleep(0.1)
-                winsound.Beep(659, 200)  # E5
-                time.sleep(0.1)
-                winsound.Beep(523, 400)  # C5
-            self.remaining_seconds -= 1
-            self.update_display()
-        else:
-            self.stop_rest(cancelled=False)
+        self.countdown_text.SetLabel(f"剩余时间: {data['remaining_display']}")
         
     def on_key(self, event):
         """按键事件处理"""
@@ -247,47 +226,23 @@ class RestScreen(wx.Frame):
 
     def on_text(self, event):
         """文本输入事件处理"""
-        # 如果不允许密码解锁，直接返回
-        if not self.config or not self.config.allow_password_skip:
-            return
-            
-        # 检查输入是否正确
-        if self.input.GetValue() == "123456789123456789123456789":
-            self.stop_rest(cancelled=True)
+        password = self.input.GetValue()
+        is_correct, message = self.rest_manager.check_password(password)
+        
+        if is_correct:
+            # 密码正确，结束休息
+            self.rest_manager.stop_rest(cancelled=True)
             
     def on_enter(self, event):
         """回车键事件处理"""
-        # 如果不允许密码解锁，显示提示
-        if not self.config or not self.config.allow_password_skip:
+        password = self.input.GetValue()
+        is_correct, message = self.rest_manager.check_password(password)
+        
+        if not is_correct:
+            # 密码错误，清空输入框并显示提示
             self.input.SetValue("")
-            self.hint.SetLabel("当前不允许使用密码提前结束休息\n按快捷键可重置休息时间")
-            return
-            
-        # 回车时检查输入
-        if self.input.GetValue() != "123456789123456789123456789":
-            self.input.SetValue("")
-            self.hint.SetLabel("输入错误,请重试\n按快捷键可重置休息时间")
-            
-    def reset_timer(self):
-        """增加休息时间，带有冷却保护"""
-        if not self.is_resting:
-            return False
-            
-        current_time = time.time()
-        # 检查是否在冷却时间内
-        if current_time - self.last_add_time < self.add_cooldown:
-            if self.config and self.config.allow_password_skip:
-                self.hint.SetLabel(f"请等待{self.add_cooldown}秒后再增加时间\n请输入123456789以解锁")
+            if "不允许" in message:
+                hint_msg = self.rest_manager.get_hint_message()
             else:
-                self.hint.SetLabel(f"请等待{self.add_cooldown}秒后再增加时间")
-            return False
-            
-        # 增加1分钟
-        self.remaining_seconds += 60
-        self.last_add_time = current_time
-        self.update_display()
-        if self.config and self.config.allow_password_skip:
-            self.hint.SetLabel("已增加1分钟休息时间\n请输入三遍123456789以解锁")
-        else:
-            self.hint.SetLabel("已增加1分钟休息时间")
-        return True
+                hint_msg = self.rest_manager.get_hint_message(password_error=True)
+            self.hint.SetLabel(hint_msg)
