@@ -60,6 +60,21 @@ class MainFrame(wx.Frame):
                 parent=None
             ).Show()
 
+    def sync_ui_state(self):
+        """同步UI状态与核心逻辑状态"""
+        if self.core.is_running:
+            self.toggle_btn.SetLabel("停止")
+        else:
+            self.toggle_btn.SetLabel("开始")
+
+    def Show(self, show=True):
+        """重写Show方法，在显示窗口时同步UI状态"""
+        result = super().Show(show)
+        if show:
+            # 同步UI状态
+            self.sync_ui_state()
+        return result
+
     def _init_ui(self):
         """初始化UI界面"""
         panel = wx.Panel(self)
