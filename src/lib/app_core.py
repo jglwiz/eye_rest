@@ -7,6 +7,7 @@ from .hotkey_manager import HotkeyManager
 from .logger_manager import LoggerManager
 from .app_states import AppState
 from .activity_detector import ActivityDetector
+from .statistics_manager import StatisticsManager
 
 class EyeRestCore:
     """护眼助手核心业务逻辑 - 纯事件驱动架构"""
@@ -16,6 +17,7 @@ class EyeRestCore:
         self.logger = LoggerManager.get_logger()
         self.config = Config()
         self.hotkey_manager = HotkeyManager()
+        self.statistics = StatisticsManager()
         
         # 状态机
         self.current_state = AppState.IDLE
@@ -217,6 +219,9 @@ class EyeRestCore:
     def _handle_rest_complete_event(self):
         """处理休息完成事件"""
         if self.current_state == AppState.RESTING:
+            # 记录统计数据 - 休息正常完成
+            self.statistics.record_completed_rest()
+            
             # 转换到工作状态，开始新的工作周期
             self._transition_to(AppState.WORKING)
             self._start_work_timers()
@@ -456,6 +461,11 @@ class EyeRestCore:
     def is_working(self):
         """兼容性属性：是否在工作状态"""
         return self.current_state == AppState.WORKING
+    
+    # 统计相关接口
+    def get_statistics_manager(self):
+        """获取统计管理器"""
+        return self.statistics
     
     def cleanup(self):
         """清理资源"""

@@ -4,10 +4,11 @@ from .rest_screen import RestScreen
 from .taskbar import TaskBarIcon
 from .app_core import EyeRestCore
 from .app_states import AppState
+from .statistics_chart import StatisticsChart
 
 class MainFrame(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="护眼助手", size=(350, 400))
+        super().__init__(None, title="护眼助手", size=(400, 480))
         
         # 创建核心业务逻辑
         self.core = EyeRestCore()
@@ -26,6 +27,9 @@ class MainFrame(wx.Frame):
         
         self._init_ui()
         
+        # 初始化统计显示
+        self.update_statistics_display()
+        
         # 绑定关闭事件
         self.Bind(wx.EVT_CLOSE, self.on_close)
         
@@ -35,6 +39,39 @@ class MainFrame(wx.Frame):
     def _init_ui(self):
         """初始化UI界面"""
         panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        # 创建标签页控件
+        self.notebook = wx.Notebook(panel)
+        
+        # 创建设置标签页
+        settings_panel = self._create_settings_panel()
+        self.notebook.AddPage(settings_panel, "设置")
+        
+        # 创建统计标签页
+        statistics_panel = self._create_statistics_panel()
+        self.notebook.AddPage(statistics_panel, "统计")
+        
+        # 添加按钮和状态显示
+        self.toggle_btn = wx.Button(panel, label="开始")
+        self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
+        
+        self.force_rest_btn = wx.Button(panel, label="提前休息")
+        self.force_rest_btn.Bind(wx.EVT_BUTTON, self.on_force_rest)
+        
+        self.status = wx.StaticText(panel, label="就绪")
+        
+        # 主布局
+        vbox.Add(self.notebook, 1, wx.ALL|wx.EXPAND, 5)
+        vbox.Add(self.toggle_btn, 0, wx.ALL|wx.EXPAND, 5)
+        vbox.Add(self.force_rest_btn, 0, wx.ALL|wx.EXPAND, 5)
+        vbox.Add(self.status, 0, wx.ALL|wx.CENTER, 5)
+        
+        panel.SetSizer(vbox)
+        
+    def _create_settings_panel(self):
+        """创建设置标签页"""
+        panel = wx.Panel(self.notebook)
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 添加配置控件
@@ -78,24 +115,50 @@ class MainFrame(wx.Frame):
         self.password_checkbox.SetValue(self.core.config.allow_password_skip)
         grid.Add(self.password_checkbox)
         
-        # 添加开始/停止按钮
-        self.toggle_btn = wx.Button(panel, label="开始")
-        self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
-        
-        # 添加提前休息按钮
-        self.force_rest_btn = wx.Button(panel, label="提前休息")
-        self.force_rest_btn.Bind(wx.EVT_BUTTON, self.on_force_rest)
-        
-        # 添加状态显示
-        self.status = wx.StaticText(panel, label="就绪")
-        
         # 布局
         vbox.Add(grid, 0, wx.ALL|wx.CENTER, 10)
-        vbox.Add(self.toggle_btn, 0, wx.ALL|wx.EXPAND, 5)
-        vbox.Add(self.force_rest_btn, 0, wx.ALL|wx.EXPAND, 5)
-        vbox.Add(self.status, 0, wx.ALL|wx.CENTER, 5)
+        panel.SetSizer(vbox)
+        return panel
+        
+    def _create_statistics_panel(self):
+        """创建统计标签页"""
+        panel = wx.Panel(self.notebook)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        # 统计数字显示区域
+        stats_grid = wx.FlexGridSizer(4, 2, 10, 10)
+        
+        stats_grid.Add(wx.StaticText(panel, label="今日完成:"))
+        self.today_count_label = wx.StaticText(panel, label="0次")
+        stats_grid.Add(self.today_count_label)
+        
+        stats_grid.Add(wx.StaticText(panel, label="本周完成:"))
+        self.week_count_label = wx.StaticText(panel, label="0次")
+        stats_grid.Add(self.week_count_label)
+        
+        stats_grid.Add(wx.StaticText(panel, label="总计完成:"))
+        self.total_count_label = wx.StaticText(panel, label="0次")
+        stats_grid.Add(self.total_count_label)
+        
+        stats_grid.Add(wx.StaticText(panel, label="平均每日:"))
+        self.average_count_label = wx.StaticText(panel, label="0.0次")
+        stats_grid.Add(self.average_count_label)
+        
+        # 图表区域
+        self.statistics_chart = StatisticsChart(panel)
+        self.statistics_chart.SetMinSize((300, 150))
+        
+        # 重置按钮
+        self.reset_stats_btn = wx.Button(panel, label="重置统计")
+        self.reset_stats_btn.Bind(wx.EVT_BUTTON, self.on_reset_statistics)
+        
+        # 布局
+        vbox.Add(stats_grid, 0, wx.ALL|wx.CENTER, 10)
+        vbox.Add(self.statistics_chart, 1, wx.ALL|wx.EXPAND, 10)
+        vbox.Add(self.reset_stats_btn, 0, wx.ALL|wx.CENTER, 5)
         
         panel.SetSizer(vbox)
+        return panel
 
     def on_status_change(self, status):
         """状态变化回调 - 更新UI显示"""
@@ -103,6 +166,8 @@ class MainFrame(wx.Frame):
         # 更新托盘图标状态
         if hasattr(self.core, 'current_state'):
             self.taskbar_icon.update_icon_by_state(self.core.current_state)
+        # 更新统计显示（可能有新的完成记录）
+        self.update_statistics_display()
 
     def on_start_rest(self, rest_minutes):
         """开始休息回调 - 显示休息界面"""
@@ -196,3 +261,32 @@ class MainFrame(wx.Frame):
                 "护眼助手",
                 "程序已最小化到系统托盘，双击图标可以重新打开主窗口",
                 parent=None).Show()
+    
+    def update_statistics_display(self):
+        """更新统计显示"""
+        try:
+            stats = self.core.get_statistics_manager()
+            self.today_count_label.SetLabel(f"{stats.get_today_count()}次")
+            self.week_count_label.SetLabel(f"{stats.get_week_count()}次")
+            self.total_count_label.SetLabel(f"{stats.get_total_count()}次")
+            self.average_count_label.SetLabel(f"{stats.get_average_daily_count()}次")
+            
+            # 更新图表数据
+            daily_records = stats.get_daily_records(7)  # 获取最近7天数据
+            self.statistics_chart.set_data(daily_records)
+        except Exception as e:
+            self.core.logger.error(f"更新统计显示失败: {str(e)}")
+    
+    def on_reset_statistics(self, event):
+        """处理重置统计按钮"""
+        dlg = wx.MessageDialog(self, "确定要重置所有统计数据吗？此操作不可撤销。", 
+                              "确认重置", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+        if dlg.ShowModal() == wx.ID_YES:
+            try:
+                self.core.get_statistics_manager().reset_statistics()
+                self.update_statistics_display()
+                wx.MessageBox("统计数据已成功重置", "提示", wx.OK | wx.ICON_INFORMATION)
+            except Exception as e:
+                wx.MessageBox(f"重置统计数据失败: {str(e)}", "错误", wx.OK | wx.ICON_ERROR)
+                self.core.logger.error(f"重置统计数据失败: {str(e)}")
+        dlg.Destroy()
