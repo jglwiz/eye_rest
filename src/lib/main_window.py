@@ -3,10 +3,11 @@ import wx.adv
 from .rest_screen import RestScreen
 from .taskbar import TaskBarIcon
 from .app_core import EyeRestCore
+from .app_states import AppState
 
 class MainFrame(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="护眼助手", size=(350, 300))
+        super().__init__(None, title="护眼助手", size=(350, 400))
         
         # 创建核心业务逻辑
         self.core = EyeRestCore()
@@ -127,12 +128,14 @@ class MainFrame(wx.Frame):
             rest_time = self.rest_spin.GetValue()
             play_sound = self.sound_checkbox.GetValue()
             allow_password = self.password_checkbox.GetValue()
+            idle_detection_enabled = self.idle_detection_checkbox.GetValue()
+            idle_threshold_minutes = self.idle_threshold_spin.GetValue()
             
-            # 保存空闲检测配置
-            self.core.config.idle_detection_enabled = self.idle_detection_checkbox.GetValue()
-            self.core.config.idle_threshold_minutes = self.idle_threshold_spin.GetValue()
-            
-            self.core.start_work_session(work_time, rest_time, play_sound, allow_password)
+            self.core.start_work_session(
+                work_time, rest_time, play_sound, allow_password,
+                idle_detection_enabled=idle_detection_enabled,
+                idle_threshold_minutes=idle_threshold_minutes
+            )
             self.toggle_btn.SetLabel("停止")
             self.Hide()
             
@@ -147,19 +150,26 @@ class MainFrame(wx.Frame):
             rest_time = self.rest_spin.GetValue()
             play_sound = self.sound_checkbox.GetValue()
             allow_password = self.password_checkbox.GetValue()
+            idle_detection_enabled = self.idle_detection_checkbox.GetValue()
+            idle_threshold_minutes = self.idle_threshold_spin.GetValue()
             
-            # 保存空闲检测配置
-            self.core.config.idle_detection_enabled = self.idle_detection_checkbox.GetValue()
-            self.core.config.idle_threshold_minutes = self.idle_threshold_spin.GetValue()
-            
-            self.core.start_work_session(work_time, rest_time, play_sound, allow_password)
+            self.core.start_work_session(
+                work_time, rest_time, play_sound, allow_password,
+                idle_detection_enabled=idle_detection_enabled,
+                idle_threshold_minutes=idle_threshold_minutes
+            )
             self.toggle_btn.SetLabel("停止")
             self.Hide()  # 隐藏主窗口
         else:
             # 停止工作会话
             self.core.stop_work_session()
             self.toggle_btn.SetLabel("开始")
-            self.rest_screen.stop_rest(cancelled=True)
+            # 只有在休息状态时才调用stop_rest，避免错误的回调
+            if self.core.current_state == AppState.RESTING:
+                self.rest_screen.stop_rest(cancelled=True)
+            else:
+                # 如果不在休息状态，直接隐藏休息界面
+                self.rest_screen.Hide()
 
     def on_set_hotkey(self, event):
         """处理设置热键"""
