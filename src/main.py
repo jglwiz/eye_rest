@@ -14,10 +14,10 @@ class EyeRestApp(wx.App):
         frame = MainFrame()
         frame.Show()
         
-        # 如果存在配置文件，等待3秒后自动开始
+        # 如果存在配置文件，等待10秒后自动开始
         if os.path.exists("eye_rest_config.json"):
             def auto_start():
-                time.sleep(5)
+                time.sleep(10)
                 # 模拟点击开始按钮
                 frame.on_toggle(None)
             

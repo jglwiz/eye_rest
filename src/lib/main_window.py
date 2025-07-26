@@ -52,19 +52,11 @@ class MainFrame(wx.Frame):
         statistics_panel = self._create_statistics_panel()
         self.notebook.AddPage(statistics_panel, "统计")
         
-        # 添加按钮和状态显示
-        self.toggle_btn = wx.Button(panel, label="开始")
-        self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
-        
-        self.force_rest_btn = wx.Button(panel, label="提前休息")
-        self.force_rest_btn.Bind(wx.EVT_BUTTON, self.on_force_rest)
-        
+        # 状态显示
         self.status = wx.StaticText(panel, label="就绪")
         
         # 主布局
         vbox.Add(self.notebook, 1, wx.ALL|wx.EXPAND, 5)
-        vbox.Add(self.toggle_btn, 0, wx.ALL|wx.EXPAND, 5)
-        vbox.Add(self.force_rest_btn, 0, wx.ALL|wx.EXPAND, 5)
         vbox.Add(self.status, 0, wx.ALL|wx.CENTER, 5)
         
         panel.SetSizer(vbox)
@@ -117,6 +109,23 @@ class MainFrame(wx.Frame):
         
         # 布局
         vbox.Add(grid, 0, wx.ALL|wx.CENTER, 10)
+        
+        # 添加控制按钮
+        button_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.toggle_btn = wx.Button(panel, label="开始")
+        self.toggle_btn.Bind(wx.EVT_BUTTON, self.on_toggle)
+        
+        self.force_rest_btn = wx.Button(panel, label="提前休息")
+        self.force_rest_btn.Bind(wx.EVT_BUTTON, self.on_force_rest)
+        
+        self.exit_btn = wx.Button(panel, label="退出程序")
+        self.exit_btn.Bind(wx.EVT_BUTTON, self.on_exit_program)
+        
+        button_box.Add(self.toggle_btn, 1, wx.ALL|wx.EXPAND, 5)
+        button_box.Add(self.force_rest_btn, 1, wx.ALL|wx.EXPAND, 5)
+        button_box.Add(self.exit_btn, 1, wx.ALL|wx.EXPAND, 5)
+        
+        vbox.Add(button_box, 0, wx.ALL|wx.EXPAND, 10)
         panel.SetSizer(vbox)
         return panel
         
@@ -126,23 +135,32 @@ class MainFrame(wx.Frame):
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 统计数字显示区域
-        stats_grid = wx.FlexGridSizer(4, 2, 10, 10)
+        stats_grid = wx.FlexGridSizer(1, 4, 10, 20)
         
-        stats_grid.Add(wx.StaticText(panel, label="今日完成:"))
+        # 单行显示：今日完成 | 本周完成 | 总计完成 | 平均每日
+        today_box = wx.BoxSizer(wx.VERTICAL)
+        today_box.Add(wx.StaticText(panel, label="今日完成:"), 0, wx.CENTER)
         self.today_count_label = wx.StaticText(panel, label="0次")
-        stats_grid.Add(self.today_count_label)
+        today_box.Add(self.today_count_label, 0, wx.CENTER)
+        stats_grid.Add(today_box, 0, wx.ALL|wx.CENTER, 5)
         
-        stats_grid.Add(wx.StaticText(panel, label="本周完成:"))
+        week_box = wx.BoxSizer(wx.VERTICAL)
+        week_box.Add(wx.StaticText(panel, label="本周完成:"), 0, wx.CENTER)
         self.week_count_label = wx.StaticText(panel, label="0次")
-        stats_grid.Add(self.week_count_label)
+        week_box.Add(self.week_count_label, 0, wx.CENTER)
+        stats_grid.Add(week_box, 0, wx.ALL|wx.CENTER, 5)
         
-        stats_grid.Add(wx.StaticText(panel, label="总计完成:"))
+        total_box = wx.BoxSizer(wx.VERTICAL)
+        total_box.Add(wx.StaticText(panel, label="总计完成:"), 0, wx.CENTER)
         self.total_count_label = wx.StaticText(panel, label="0次")
-        stats_grid.Add(self.total_count_label)
+        total_box.Add(self.total_count_label, 0, wx.CENTER)
+        stats_grid.Add(total_box, 0, wx.ALL|wx.CENTER, 5)
         
-        stats_grid.Add(wx.StaticText(panel, label="平均每日:"))
+        average_box = wx.BoxSizer(wx.VERTICAL)
+        average_box.Add(wx.StaticText(panel, label="平均每日:"), 0, wx.CENTER)
         self.average_count_label = wx.StaticText(panel, label="0.0次")
-        stats_grid.Add(self.average_count_label)
+        average_box.Add(self.average_count_label, 0, wx.CENTER)
+        stats_grid.Add(average_box, 0, wx.ALL|wx.CENTER, 5)
         
         # 图表区域
         self.statistics_chart = StatisticsChart(panel)
@@ -247,6 +265,15 @@ class MainFrame(wx.Frame):
                 wx.MessageBox("快捷键设置失败，请检查格式", "错误")
                 # 恢复原来的热键
                 self.hotkey_text.SetValue(self.core.config.hotkey)
+                
+    def on_exit_program(self, event):
+        """处理退出程序按钮"""
+        dlg = wx.MessageDialog(self, "确定要退出护眼助手程序吗？", 
+                              "确认退出", wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+        if dlg.ShowModal() == wx.ID_YES:
+            self.real_close = True  # 设置为真正关闭
+            self.Close()  # 关闭主窗口
+        dlg.Destroy()
                 
     def on_close(self, event):
         """处理窗口关闭事件"""
