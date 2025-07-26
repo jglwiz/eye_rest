@@ -410,6 +410,20 @@ class EyeRestCore:
     def update_hotkey(self, new_hotkey):
         """更新热键设置"""
         try:
+            # 标准化新热键格式进行比较
+            normalized_new_hotkey = self.hotkey_manager._normalize_hotkey(new_hotkey)
+            normalized_current_hotkey = self.hotkey_manager._normalize_hotkey(self.config.hotkey)
+            
+            # 如果新热键和当前热键相同，跳过设置
+            if normalized_new_hotkey == normalized_current_hotkey:
+                self.logger.info(f"热键未改变，跳过设置: {new_hotkey}")
+                return True
+            
+            # 先停止所有热键监听并清空绑定
+            self.hotkey_manager.stop()
+            self.hotkey_manager._bindings.clear()
+            
+            # 注册新的热键
             self.hotkey_manager.register_hotkey(new_hotkey, self.force_rest)
             self.config.hotkey = new_hotkey
             self.config.save()

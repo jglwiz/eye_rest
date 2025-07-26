@@ -1,33 +1,4 @@
 {
-  "total_completed": 21,
-  "daily_records": [
-    {
-      "date": "2025-07-20",
-      "completed": 2
-    },
-    {
-      "date": "2025-07-21",
-      "completed": 4
-    },
-    {
-      "date": "2025-07-22",
-      "completed": 1
-    },
-    {
-      "date": "2025-07-23",
-      "completed": 3
-    },
-    {
-      "date": "2025-07-24",
-      "completed": 5
-    },
-    {
-      "date": "2025-07-25",
-      "completed": 2
-    },
-    {
-      "date": "2025-07-26",
-      "completed": 4
-    }
-  ]
+  "total_completed": 0,
+  "daily_records": []
 }
