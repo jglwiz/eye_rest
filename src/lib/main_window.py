@@ -5,10 +5,11 @@ from .taskbar import TaskBarIcon
 from .app_core import EyeRestCore
 from .app_states import AppState
 from .statistics_chart import StatisticsChart
+from .hourly_chart import HourlyChart
 
 class MainFrame(wx.Frame):
     def __init__(self):
-        super().__init__(None, title="护眼助手", size=(400, 480))
+        super().__init__(None, title="护眼助手", size=(400, 550))
         
         # 创建核心业务逻辑
         self.core = EyeRestCore()
@@ -115,16 +116,6 @@ class MainFrame(wx.Frame):
         self.rest_spin = wx.SpinCtrl(panel, value=str(self.core.config.rest_time))
         grid.Add(self.rest_spin)
         
-        # 添加空闲检测配置
-        grid.Add(wx.StaticText(panel, label="启用离开检测:"))
-        self.idle_detection_checkbox = wx.CheckBox(panel)
-        self.idle_detection_checkbox.SetValue(self.core.config.idle_detection_enabled)
-        grid.Add(self.idle_detection_checkbox)
-        
-        grid.Add(wx.StaticText(panel, label="离开检测时间(分钟):"))
-        self.idle_threshold_spin = wx.SpinCtrl(panel, value=str(self.core.config.idle_threshold_minutes), min=1, max=30)
-        grid.Add(self.idle_threshold_spin)
-        
         # 添加快捷键配置
         grid.Add(wx.StaticText(panel, label="提前休息快捷键:"))
         hotkey_box = wx.BoxSizer(wx.HORIZONTAL)
@@ -134,6 +125,16 @@ class MainFrame(wx.Frame):
         hotkey_box.Add(self.hotkey_text, 1, wx.RIGHT, 5)
         hotkey_box.Add(self.hotkey_btn, 0)
         grid.Add(hotkey_box)
+
+        # 添加空闲检测配置
+        grid.Add(wx.StaticText(panel, label="启用离开检测:"))
+        self.idle_detection_checkbox = wx.CheckBox(panel)
+        self.idle_detection_checkbox.SetValue(self.core.config.idle_detection_enabled)
+        grid.Add(self.idle_detection_checkbox)
+        
+        grid.Add(wx.StaticText(panel, label="离开检测时间(分钟):"))
+        self.idle_threshold_spin = wx.SpinCtrl(panel, value=str(self.core.config.idle_threshold_minutes), min=1, max=30)
+        grid.Add(self.idle_threshold_spin)
 
         # 添加声音和密码选项
         grid.Add(wx.StaticText(panel, label="休息结束时播放声音:"))
@@ -165,6 +166,15 @@ class MainFrame(wx.Frame):
         button_box.Add(self.exit_btn, 1, wx.ALL|wx.EXPAND, 5)
         
         vbox.Add(button_box, 0, wx.ALL|wx.EXPAND, 10)
+        
+        # 添加小时统计图表
+        hourly_title = wx.StaticText(panel, label="今日每小时休息统计:")
+        self.hourly_chart = HourlyChart(panel)
+        self.hourly_chart.SetMinSize((400, 120))
+        
+        vbox.Add(hourly_title, 0, wx.ALL|wx.LEFT, 10)
+        vbox.Add(self.hourly_chart, 0, wx.ALL|wx.EXPAND, 10)
+        
         panel.SetSizer(vbox)
         return panel
         
@@ -340,6 +350,10 @@ class MainFrame(wx.Frame):
             # 更新图表数据
             daily_records = stats.get_daily_records(7)  # 获取最近7天数据
             self.statistics_chart.set_data(daily_records)
+            
+            # 更新小时图表数据
+            hourly_records = stats.get_today_hourly_records()
+            self.hourly_chart.set_data(hourly_records)
         except Exception as e:
             self.core.logger.error(f"更新统计显示失败: {str(e)}")
     

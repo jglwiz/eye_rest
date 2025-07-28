@@ -8,9 +8,19 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lib.main_window import MainFrame
+from lib.process_checker import check_duplicate_process
 
 class EyeRestApp(wx.App):
     def OnInit(self):
+        # 检查是否已有程序实例在运行
+        if check_duplicate_process():
+            wx.MessageBox(
+                "护眼助手已在运行中！\n\n请检查系统托盘图标，双击可打开设置界面。",
+                "护眼助手",
+                wx.OK | wx.ICON_INFORMATION
+            )
+            return False  # 退出应用
+        
         frame = MainFrame()
         
         # 检查是否有配置文件

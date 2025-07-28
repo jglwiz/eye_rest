@@ -12,16 +12,29 @@ class StatisticsManager:
         self.stats_path = "statistics.json"
         self.data = {
             "total_completed": 0,
-            "daily_records": []  # [{"date": "2024-01-15", "completed": 5}, ...]
+            "daily_records": [],  # [{"date": "2024-01-15", "completed": 5}, ...]
+            "today_hourly": {
+                "date": "",
+                "hours": [0] * 24  # 24小时的统计数据，索引0对应0点，索引23对应23点
+            }
         }
         self.load()
+        self._check_and_reset_hourly()
     
     def load(self):
         """从文件加载统计数据"""
         if os.path.exists(self.stats_path):
             try:
                 with open(self.stats_path, "r", encoding="utf-8") as f:
-                    self.data = json.load(f)
+                    loaded_data = json.load(f)
+                    # 合并加载的数据，保证新字段的兼容性
+                    self.data.update(loaded_data)
+                    # 确保today_hourly字段存在
+                    if "today_hourly" not in self.data:
+                        self.data["today_hourly"] = {
+                            "date": "",
+                            "hours": [0] * 24
+                        }
                 self.logger.info("统计数据加载成功")
             except Exception as e:
                 self.logger.error(f"统计数据加载失败: {str(e)}")
@@ -33,10 +46,25 @@ class StatisticsManager:
         """初始化默认数据"""
         self.data = {
             "total_completed": 0,
-            "daily_records": []
+            "daily_records": [],
+            "today_hourly": {
+                "date": "",
+                "hours": [0] * 24
+            }
         }
         self.save()
     
+    def _check_and_reset_hourly(self):
+        """检查日期变化并重置小时数据"""
+        today_str = date.today().strftime("%Y-%m-%d")
+        if self.data["today_hourly"]["date"] != today_str:
+            self.data["today_hourly"] = {
+                "date": today_str,
+                "hours": [0] * 24
+            }
+            self.save()
+            self.logger.info(f"重置小时统计数据: {today_str}")
+
     def save(self):
         """保存统计数据到文件"""
         try:
@@ -55,9 +83,16 @@ class StatisticsManager:
             timestamp = datetime.now()
         
         today_str = timestamp.strftime("%Y-%m-%d")
+        current_hour = timestamp.hour
+        
+        # 检查并重置小时数据（防止跨天情况）
+        self._check_and_reset_hourly()
         
         # 增加总计数
         self.data["total_completed"] += 1
+        
+        # 记录小时统计
+        self.data["today_hourly"]["hours"][current_hour] += 1
         
         # 查找或创建今日记录
         today_record = None
@@ -83,7 +118,7 @@ class StatisticsManager:
         # 保存数据
         self.save()
         
-        self.logger.info(f"记录休息完成: {today_str}")
+        self.logger.info(f"记录休息完成: {today_str} {current_hour}点")
     
     def _cleanup_old_records(self):
         """清理超过30天的旧记录"""
@@ -93,6 +128,20 @@ class StatisticsManager:
             if record["date"] >= cutoff_date
         ]
     
+    def get_today_hourly_records(self):
+        """获取今日每小时休息统计
+        Returns:
+            list: [{"hour": 0, "completed": 1}, {"hour": 1, "completed": 0}, ...]
+        """
+        self._check_and_reset_hourly()
+        result = []
+        for hour in range(24):
+            result.append({
+                "hour": hour,
+                "completed": self.data["today_hourly"]["hours"][hour]
+            })
+        return result
+
     def get_today_count(self):
         """获取今日完成次数"""
         today_str = date.today().strftime("%Y-%m-%d")
@@ -161,7 +210,11 @@ class StatisticsManager:
         """重置所有统计数据"""
         self.data = {
             "total_completed": 0,
-            "daily_records": []
+            "daily_records": [],
+            "today_hourly": {
+                "date": date.today().strftime("%Y-%m-%d"),
+                "hours": [0] * 24
+            }
         }
         self.save()
         self.logger.info("统计数据已重置") 
