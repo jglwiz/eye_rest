@@ -8,7 +8,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lib.main_window import MainFrame
-from lib.process_checker import check_duplicate_process
+from lib.process_checker import check_duplicate_process, create_lock_file
 
 class EyeRestApp(wx.App):
     def OnInit(self):
@@ -20,6 +20,14 @@ class EyeRestApp(wx.App):
                 wx.OK | wx.ICON_INFORMATION
             )
             return False  # 退出应用
+        
+        # 创建锁文件
+        if not create_lock_file():
+            wx.MessageBox(
+                "无法创建程序锁定文件，可能存在权限问题。\n程序将继续运行，但可能无法防止重复启动。",
+                "警告",
+                wx.OK | wx.ICON_WARNING
+            )
         
         frame = MainFrame()
         

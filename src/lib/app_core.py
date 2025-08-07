@@ -8,6 +8,7 @@ from .logger_manager import LoggerManager
 from .app_states import AppState
 from .activity_detector import ActivityDetector
 from .statistics_manager import StatisticsManager
+from .process_checker import remove_lock_file
 
 class EyeRestCore:
     """护眼助手核心业务逻辑 - 纯事件驱动架构"""
@@ -488,4 +489,6 @@ class EyeRestCore:
         if self.hotkey_manager:
             self.hotkey_manager.stop()
             self.hotkey_manager = None
+        # 删除锁文件
+        remove_lock_file()
         self.logger.info("核心逻辑清理完成") 

@@ -6,6 +6,7 @@ from .app_core import EyeRestCore
 from .app_states import AppState
 from .statistics_chart import StatisticsChart
 from .hourly_chart import HourlyChart
+from .process_checker import remove_lock_file
 
 class MainFrame(wx.Frame):
     def __init__(self):
@@ -14,8 +15,8 @@ class MainFrame(wx.Frame):
         # 创建核心业务逻辑
         self.core = EyeRestCore()
         
-        # 创建休息窗口
-        self.rest_screen = RestScreen()
+        # 创建休息窗口时传入core
+        self.rest_screen = RestScreen(core=self.core)
         self.real_close = False
         
         # 创建系统托盘图标
@@ -330,6 +331,8 @@ class MainFrame(wx.Frame):
             self.core.cleanup()  # 清理核心逻辑资源
             self.taskbar_icon.Destroy()
             self.rest_screen.Destroy()
+            # 删除锁文件
+            remove_lock_file()
             event.Skip()
         else:  # 如果是点击关闭按钮
             self.Hide()

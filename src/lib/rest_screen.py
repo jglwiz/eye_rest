@@ -4,17 +4,22 @@ import win32con
 import win32api
 import win32com.client
 from .rest_manager import RestManager
+from .hourly_chart import DarkHourlyChart
+from .statistics_manager import StatisticsManager
 
 class RestScreen(wx.Frame):
     """休息界面，只负责UI显示"""
     
-    def __init__(self):
+    def __init__(self, core=None):
         """初始化休息界面"""
         style = (wx.FRAME_NO_TASKBAR | wx.STAY_ON_TOP | wx.BORDER_NONE)
         super().__init__(None, style=style)
         
         # 创建休息管理器
         self.rest_manager = RestManager()
+        
+        # 使用传入的core获取统计管理器，而不是创建新实例
+        self.core = core
         
         # 设置窗口扩展样式
         self._set_window_style()
@@ -40,41 +45,94 @@ class RestScreen(wx.Frame):
         """初始化UI组件"""
         # 创建主面板
         panel = wx.Panel(self)
-        vbox = wx.BoxSizer(wx.VERTICAL)
+        panel.SetBackgroundColour(wx.BLACK)
+        
+        # 创建垂直布局（单列）
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # 1. 休息倒计时区域
+        time_panel = wx.Panel(panel)
+        time_panel.SetBackgroundColour(wx.BLACK)
+        time_sizer = wx.BoxSizer(wx.VERTICAL)
         
         # 添加当前时间显示
-        self.time_text = wx.StaticText(panel, label="                  ", style=wx.ALIGN_CENTER)
+        self.time_text = wx.StaticText(time_panel, label="                  ", style=wx.ALIGN_CENTER)
         self.time_text.SetForegroundColour(wx.WHITE)
-        time_font = wx.Font(48, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        time_font = wx.Font(36, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.time_text.SetFont(time_font)
         
         # 添加倒计时显示
-        self.countdown_text = wx.StaticText(panel, label="                  ", style=wx.ALIGN_CENTER) 
+        self.countdown_text = wx.StaticText(time_panel, label="                  ", style=wx.ALIGN_CENTER) 
         self.countdown_text.SetForegroundColour(wx.WHITE)
         countdown_font = wx.Font(48, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.countdown_text.SetFont(countdown_font)
         
+        # 时间面板布局
+        time_sizer.Add(self.time_text, 0, wx.ALL|wx.ALIGN_CENTER, 5)
+        time_sizer.AddSpacer(20)
+        time_sizer.Add(self.countdown_text, 0, wx.ALL|wx.ALIGN_CENTER, 5)
+        time_panel.SetSizer(time_sizer)
+        
+        # 2. 小时统计图区域
+        chart_panel = wx.Panel(panel)
+        chart_panel.SetBackgroundColour(wx.BLACK)
+        chart_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # 统计图标题
+        chart_title = wx.StaticText(chart_panel, label="今日小时统计", style=wx.ALIGN_CENTER)
+        chart_title.SetForegroundColour(wx.WHITE)
+        title_font = wx.Font(16, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        chart_title.SetFont(title_font)
+        
+        # 创建图表容器，用于控制图表宽度
+        chart_container = wx.Panel(chart_panel)
+        chart_container.SetBackgroundColour(wx.BLACK)
+        chart_container_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        # 创建小时统计图
+        self.hourly_chart = DarkHourlyChart(chart_container)
+        
+        # 图表容器布局：左右留空，图表居中，宽度为容器的一半
+        chart_container_sizer.AddStretchSpacer(1)  # 左侧弹性空间
+        chart_container_sizer.Add(self.hourly_chart, 1, wx.EXPAND)  # 图表占中间1份
+        chart_container_sizer.AddStretchSpacer(1)  # 右侧弹性空间
+        chart_container.SetSizer(chart_container_sizer)
+        
+        # 图表面板布局
+        chart_sizer.Add(chart_title, 0, wx.ALL|wx.ALIGN_CENTER, 10)
+        chart_sizer.Add(chart_container, 1, wx.ALL|wx.EXPAND, 20)
+        chart_panel.SetSizer(chart_sizer)
+        
+        # 3. 密码输入区域
+        input_panel = wx.Panel(panel)
+        input_panel.SetBackgroundColour(wx.BLACK)
+        input_sizer = wx.BoxSizer(wx.VERTICAL)
+        
         # 添加提示文本
-        self.hint = wx.StaticText(panel, label="按快捷键可增加1分钟休息时间", style=wx.ALIGN_CENTER)
+        self.hint = wx.StaticText(input_panel, label="按快捷键可增加1分钟休息时间", style=wx.ALIGN_CENTER)
         self.hint.SetForegroundColour(wx.WHITE)
         hint_font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.hint.SetFont(hint_font)
         
         # 添加输入框
-        self.input = wx.TextCtrl(panel, style=wx.TE_PASSWORD|wx.TE_PROCESS_ENTER)
+        self.input = wx.TextCtrl(input_panel, style=wx.TE_PASSWORD|wx.TE_PROCESS_ENTER)
         self.input.Bind(wx.EVT_TEXT_ENTER, self.on_enter)
         self.input.Bind(wx.EVT_TEXT, self.on_text)
         
-        # 布局
-        vbox.AddStretchSpacer(1)  # 上方弹性空间
-        vbox.Add(self.time_text, 0, wx.ALL|wx.ALIGN_CENTER, 5)
-        vbox.AddSpacer(30)  # 时间和倒计时之间的间距
-        vbox.Add(self.countdown_text, 0, wx.ALL|wx.ALIGN_CENTER, 5)
-        vbox.AddStretchSpacer(2)  # 下方弹性空间
-        vbox.Add(self.hint, 0, wx.ALL|wx.ALIGN_CENTER, 5)
-        vbox.Add(self.input, 0, wx.ALL|wx.ALIGN_CENTER, 5)
-        vbox.AddSpacer(50)
-        panel.SetSizer(vbox)
+        # 输入面板布局
+        input_sizer.Add(self.hint, 0, wx.ALL|wx.ALIGN_CENTER, 5)
+        input_sizer.AddSpacer(10)
+        input_sizer.Add(self.input, 0, wx.ALL|wx.ALIGN_CENTER, 5)
+        input_panel.SetSizer(input_sizer)
+        
+        # 主布局：垂直排列三个区域
+        main_sizer.AddSpacer(50)  # 顶部间距
+        main_sizer.Add(time_panel, 0, wx.ALL|wx.EXPAND, 20)  # 倒计时区域
+        main_sizer.Add(chart_panel, 1, wx.ALL|wx.EXPAND, 20)  # 图表区域（可扩展）
+        main_sizer.Add(input_panel, 0, wx.ALL|wx.EXPAND, 20)  # 输入区域
+        main_sizer.AddSpacer(50)  # 底部间距
+        
+        panel.SetSizer(main_sizer)
     
     def start_rest(self, minutes, config=None, on_complete=None, on_cancel=None):
         """开始休息
@@ -112,6 +170,17 @@ class RestScreen(wx.Frame):
         # 更新提示信息
         hint_msg = self.rest_manager.get_hint_message()
         wx.CallAfter(self.hint.SetLabel, hint_msg)
+        
+        # 更新小时统计图 - 使用共享的统计管理器
+        if self.core:
+            hourly_data = self.core.get_statistics_manager().get_today_hourly_records()
+        else:
+            # 如果没有core，创建临时实例作为后备
+            from .statistics_manager import StatisticsManager
+            temp_stats = StatisticsManager()
+            hourly_data = temp_stats.get_today_hourly_records()
+        
+        wx.CallAfter(self.hourly_chart.set_data, hourly_data)
         
         # 显示窗口
         def show_and_setup():
