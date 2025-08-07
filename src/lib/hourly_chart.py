@@ -280,15 +280,29 @@ class DarkHourlyChart(wx.Panel):
         arrow_x = x + width
         arrow_y = y + height
         
-        # 创建箭头的三个点（向右的三角形）
+        # 创建X轴箭头的三个点（向右的三角形）
         arrow_points = [
             wx.Point(arrow_x, arrow_y),  # 箭头尖端
             wx.Point(arrow_x - arrow_size, arrow_y - arrow_size//2),  # 上方点
             wx.Point(arrow_x - arrow_size, arrow_y + arrow_size//2)   # 下方点
         ]
         
-        # 绘制填充的箭头三角形
+        # 绘制填充的X轴箭头三角形
         dc.DrawPolygon(arrow_points)
+        
+        # 绘制Y轴箭头
+        y_arrow_x = x
+        y_arrow_y = y
+        
+        # 创建Y轴箭头的三个点（向上的三角形）
+        y_arrow_points = [
+            wx.Point(y_arrow_x, y_arrow_y),  # 箭头尖端
+            wx.Point(y_arrow_x - arrow_size//2, y_arrow_y + arrow_size),  # 左方点
+            wx.Point(y_arrow_x + arrow_size//2, y_arrow_y + arrow_size)   # 右方点
+        ]
+        
+        # 绘制填充的Y轴箭头三角形
+        dc.DrawPolygon(y_arrow_points)
         
     def _draw_bars(self, dc, x, y, width, height):
         """绘制条形图"""
@@ -338,8 +352,8 @@ class DarkHourlyChart(wx.Panel):
         bar_count = 24
         bar_spacing = width / bar_count
         
-        # 只显示关键小时标签：0, 6, 12, 18
-        key_hours = [0, 6, 12, 18]
+        # 增加更多小时标签：6,8,10,12,14,16,18,20,22
+        key_hours = [6,7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22]
         
         for hour in key_hours:
             hour_text = f"{hour:02d}"

@@ -143,10 +143,15 @@ class RestScreen(wx.Frame):
         time_sizer.Add(self.countdown_text, 0, wx.ALL|wx.ALIGN_CENTER, 5)
         time_panel.SetSizer(time_sizer)
         
-        # 2. 小时统计图区域
+        # 2. 小时统计图区域 - 设置固定高度40%
         chart_panel = wx.Panel(panel)
         chart_panel.SetBackgroundColour(wx.BLACK)
         chart_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # 设置图表区域高度为屏幕高度的40%
+        chart_height = int(self.screen.height * 0.4)
+        chart_panel.SetMinSize((-1, chart_height))
+        chart_panel.SetMaxSize((-1, chart_height))
         
         # 统计图标题
         chart_title = wx.StaticText(chart_panel, label="今日小时统计", style=wx.ALIGN_CENTER)
@@ -162,9 +167,9 @@ class RestScreen(wx.Frame):
         # 创建小时统计图
         self.hourly_chart = DarkHourlyChart(chart_container)
         
-        # 图表容器布局：左右留空，图表居中，宽度为容器的一半
+        # 图表容器布局：左右留空，图表居中，增加图表宽度
         chart_container_sizer.AddStretchSpacer(1)  # 左侧弹性空间
-        chart_container_sizer.Add(self.hourly_chart, 1, wx.EXPAND)  # 图表占中间1份
+        chart_container_sizer.Add(self.hourly_chart, 3, wx.EXPAND)  # 图表占3份，增加宽度
         chart_container_sizer.AddStretchSpacer(1)  # 右侧弹性空间
         chart_container.SetSizer(chart_container_sizer)
         
@@ -179,11 +184,12 @@ class RestScreen(wx.Frame):
         self.unlock_btn.SetForegroundColour(wx.WHITE)
         self.unlock_btn.Bind(wx.EVT_BUTTON, self.on_unlock_click)
         
-        # 主布局：垂直排列两个区域
+        # 主布局：垂直排列，图表靠近底部但留出按钮空间
         main_sizer.AddSpacer(50)  # 顶部间距
         main_sizer.Add(time_panel, 0, wx.ALL|wx.EXPAND, 20)  # 倒计时区域
-        main_sizer.Add(chart_panel, 1, wx.ALL|wx.EXPAND, 20)  # 图表区域（可扩展）
-        main_sizer.AddSpacer(50)  # 底部间距
+        main_sizer.AddStretchSpacer(1)  # 中间弹性空间
+        main_sizer.Add(chart_panel, 0, wx.ALL|wx.EXPAND, 20)  # 图表区域（固定高度40%）
+        main_sizer.AddSpacer(80)  # 底部留出空间给解锁按钮
         
         panel.SetSizer(main_sizer)
         
