@@ -8,6 +8,75 @@ from .hourly_chart import DarkHourlyChart
 from .statistics_manager import StatisticsManager
 import threading
 
+class PasswordDialog(wx.Dialog):
+    """密码输入对话框"""
+    
+    def __init__(self, parent, rest_manager):
+        super().__init__(parent, title="解锁休息屏幕", style=wx.DEFAULT_DIALOG_STYLE)
+        self.rest_manager = rest_manager
+        self.SetSize((400, 150))
+        self.SetBackgroundColour(wx.Colour(40, 40, 40))  # 深灰色背景
+        
+        # 创建UI
+        panel = wx.Panel(self)
+        panel.SetBackgroundColour(wx.Colour(40, 40, 40))
+        
+        # 密码输入框
+        self.password_input = wx.TextCtrl(panel, style=wx.TE_PASSWORD|wx.TE_PROCESS_ENTER)
+        self.password_input.Bind(wx.EVT_TEXT_ENTER, self.on_enter)
+        
+        # 按钮
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        ok_btn = wx.Button(panel, wx.ID_OK, "确定")
+        ok_btn.SetBackgroundColour(wx.Colour(60, 60, 60))
+        ok_btn.SetForegroundColour(wx.WHITE)
+        cancel_btn = wx.Button(panel, wx.ID_CANCEL, "取消")
+        cancel_btn.SetBackgroundColour(wx.Colour(60, 60, 60))
+        cancel_btn.SetForegroundColour(wx.WHITE)
+        btn_sizer.Add(ok_btn, 0, wx.ALL, 5)
+        btn_sizer.Add(cancel_btn, 0, wx.ALL, 5)
+        
+        # 布局
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        hint_label = wx.StaticText(panel, label="请输入三遍123456789解锁", style=wx.ALIGN_CENTER)
+        hint_label.SetForegroundColour(wx.WHITE)
+        sizer.Add(hint_label, 0, wx.ALL|wx.ALIGN_CENTER, 10)
+        sizer.Add(self.password_input, 0, wx.ALL|wx.EXPAND, 10)
+        sizer.Add(btn_sizer, 0, wx.ALL|wx.ALIGN_CENTER, 10)
+        
+        panel.SetSizer(sizer)
+        
+        # 绑定事件
+        ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
+        cancel_btn.Bind(wx.EVT_BUTTON, self.on_cancel)
+        
+        # 设置焦点
+        self.password_input.SetFocus()
+        
+        # 居中显示
+        self.CenterOnParent()
+        
+    def on_enter(self, event):
+        """回车键处理"""
+        self.on_ok(event)
+        
+    def on_ok(self, event):
+        """确定按钮处理"""
+        password = self.password_input.GetValue()
+        is_correct, message = self.rest_manager.check_password(password)
+        
+        if is_correct:
+            self.EndModal(wx.ID_OK)
+        else:
+            # 密码错误，显示提示并清空输入框
+            wx.MessageBox("密码错误，请重试", "错误", wx.OK | wx.ICON_ERROR)
+            self.password_input.SetValue("")
+            self.password_input.SetFocus()
+            
+    def on_cancel(self, event):
+        """取消按钮处理"""
+        self.EndModal(wx.ID_CANCEL)
+
 class RestScreen(wx.Frame):
     """休息界面，只负责UI显示"""
     
@@ -48,7 +117,7 @@ class RestScreen(wx.Frame):
         panel = wx.Panel(self)
         panel.SetBackgroundColour(wx.BLACK)
         
-        # 创建垂直布局（单列）
+        # 创建垂直布局（两列）
         main_sizer = wx.BoxSizer(wx.VERTICAL)
         
         # 1. 休息倒计时区域
@@ -104,36 +173,43 @@ class RestScreen(wx.Frame):
         chart_sizer.Add(chart_container, 1, wx.ALL|wx.EXPAND, 20)
         chart_panel.SetSizer(chart_sizer)
         
-        # 3. 密码输入区域
-        input_panel = wx.Panel(panel)
-        input_panel.SetBackgroundColour(wx.BLACK)
-        input_sizer = wx.BoxSizer(wx.VERTICAL)
+        # 3. 右下角解锁按钮
+        self.unlock_btn = wx.Button(panel, label="解锁", size=(80, 35))
+        self.unlock_btn.SetBackgroundColour(wx.Colour(60, 60, 60))
+        self.unlock_btn.SetForegroundColour(wx.WHITE)
+        self.unlock_btn.Bind(wx.EVT_BUTTON, self.on_unlock_click)
         
-        # 添加提示文本
-        self.hint = wx.StaticText(input_panel, label="按快捷键可增加1分钟休息时间\n按 Ctrl+Shift+E 可临时暂停20秒", style=wx.ALIGN_CENTER)
-        self.hint.SetForegroundColour(wx.WHITE)
-        hint_font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
-        self.hint.SetFont(hint_font)
-        
-        # 添加输入框
-        self.input = wx.TextCtrl(input_panel, style=wx.TE_PASSWORD|wx.TE_PROCESS_ENTER)
-        self.input.Bind(wx.EVT_TEXT_ENTER, self.on_enter)
-        self.input.Bind(wx.EVT_TEXT, self.on_text)
-        
-        # 输入面板布局
-        input_sizer.Add(self.hint, 0, wx.ALL|wx.ALIGN_CENTER, 5)
-        input_sizer.AddSpacer(10)
-        input_sizer.Add(self.input, 0, wx.ALL|wx.ALIGN_CENTER, 5)
-        input_panel.SetSizer(input_sizer)
-        
-        # 主布局：垂直排列三个区域
+        # 主布局：垂直排列两个区域
         main_sizer.AddSpacer(50)  # 顶部间距
         main_sizer.Add(time_panel, 0, wx.ALL|wx.EXPAND, 20)  # 倒计时区域
         main_sizer.Add(chart_panel, 1, wx.ALL|wx.EXPAND, 20)  # 图表区域（可扩展）
-        main_sizer.Add(input_panel, 0, wx.ALL|wx.EXPAND, 20)  # 输入区域
         main_sizer.AddSpacer(50)  # 底部间距
         
         panel.SetSizer(main_sizer)
+        
+        # 使用绝对定位将按钮放在右下角
+        def position_unlock_button():
+            panel_size = panel.GetSize()
+            btn_size = self.unlock_btn.GetSize()
+            x = panel_size.width - btn_size.width - 20  # 右边距20像素
+            y = panel_size.height - btn_size.height - 20  # 下边距20像素
+            self.unlock_btn.SetPosition((x, y))
+        
+        # 绑定尺寸变化事件来重新定位按钮
+        panel.Bind(wx.EVT_SIZE, lambda event: (position_unlock_button(), event.Skip()))
+        wx.CallAfter(position_unlock_button)  # 初始定位
+    
+    def on_unlock_click(self, event):
+        """解锁按钮点击事件"""
+        # 创建并显示密码对话框
+        dialog = PasswordDialog(self, self.rest_manager)
+        result = dialog.ShowModal()
+        
+        if result == wx.ID_OK:
+            # 密码正确，结束休息
+            self.rest_manager.stop_rest(cancelled=True)
+        
+        dialog.Destroy()
     
     def start_rest(self, minutes, config=None, on_complete=None, on_cancel=None):
         """开始休息
@@ -149,13 +225,11 @@ class RestScreen(wx.Frame):
         
         def on_rest_complete():
             wx.CallAfter(self.Hide)
-            wx.CallAfter(self.input.SetValue, "")
             if on_complete:
                 on_complete()
         
         def on_rest_cancel():
             wx.CallAfter(self.Hide)
-            wx.CallAfter(self.input.SetValue, "")
             if on_cancel:
                 on_cancel()
         
@@ -167,10 +241,6 @@ class RestScreen(wx.Frame):
             on_cancel=on_rest_cancel,
             on_update_display=on_update_display
         )
-        
-        # 更新提示信息
-        hint_msg = self.rest_manager.get_hint_message()
-        wx.CallAfter(self.hint.SetLabel, hint_msg)
         
         # 更新小时统计图 - 使用共享的统计管理器
         if self.core:
@@ -188,7 +258,6 @@ class RestScreen(wx.Frame):
             self.Show()
             self.Maximize(True)
             self._set_window_style()
-            self.input.SetFocus()
         
         wx.CallAfter(show_and_setup)
         
@@ -199,18 +268,10 @@ class RestScreen(wx.Frame):
         """
         self.rest_manager.stop_rest(cancelled=cancelled)
         wx.CallAfter(self.Hide)
-        wx.CallAfter(self.input.SetValue, "")
     
     def add_rest_time(self):
         """增加休息时间"""
         success, message = self.rest_manager.add_rest_time()
-        if success:
-            # 更新提示信息
-            hint_msg = self.rest_manager.get_hint_message()
-            wx.CallAfter(self.hint.SetLabel, hint_msg)
-        else:
-            # 显示错误信息
-            wx.CallAfter(self.hint.SetLabel, message)
         return success
     
     def temp_pause(self):
@@ -223,7 +284,6 @@ class RestScreen(wx.Frame):
                 self.rest_manager.timer_thread.join(timeout=1)
         
         wx.CallAfter(self.Hide)
-        wx.CallAfter(self.input.SetValue, "")
     
     def temp_resume(self):
         """恢复休息屏幕"""
@@ -243,7 +303,6 @@ class RestScreen(wx.Frame):
             self.Show()
             self.Maximize(True)
             self._set_window_style()
-            self.input.SetFocus()
         
         wx.CallAfter(show_and_setup)
         
@@ -305,7 +364,6 @@ class RestScreen(wx.Frame):
         if event.IsShown():
             self.Maximize(True)
             self._set_window_style()  # 确保窗口样式正确设置
-            self.input.SetFocus()
         event.Skip()
         
     def on_close(self, event):
@@ -327,26 +385,3 @@ class RestScreen(wx.Frame):
             
         # 重新应用窗口样式确保置顶和虚拟桌面固定
         self._set_window_style()
-
-    def on_text(self, event):
-        """文本输入事件处理"""
-        password = self.input.GetValue()
-        is_correct, message = self.rest_manager.check_password(password)
-        
-        if is_correct:
-            # 密码正确，结束休息
-            self.rest_manager.stop_rest(cancelled=True)
-            
-    def on_enter(self, event):
-        """回车键事件处理"""
-        password = self.input.GetValue()
-        is_correct, message = self.rest_manager.check_password(password)
-        
-        if not is_correct:
-            # 密码错误，清空输入框并显示提示
-            self.input.SetValue("")
-            if "不允许" in message:
-                hint_msg = self.rest_manager.get_hint_message()
-            else:
-                hint_msg = self.rest_manager.get_hint_message(password_error=True)
-            self.hint.SetLabel(hint_msg)
