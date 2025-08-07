@@ -1,1 +1,1 @@
-{"work_time": 1, "rest_time": 1, "hotkey": "ctrl+shift+r", "play_sound_after_rest": false, "allow_password_skip": true, "idle_detection_enabled": true, "idle_threshold_minutes": 1}
+{"work_time": 1, "rest_time": 1, "hotkey": "ctrl+shift+r", "play_sound_after_rest": true, "allow_password_skip": true, "idle_detection_enabled": true, "idle_threshold_minutes": 1, "temp_pause_enabled": true, "temp_pause_duration": 10, "temp_pause_hotkey": "ctrl+shift+e"}

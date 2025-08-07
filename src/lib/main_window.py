@@ -26,6 +26,8 @@ class MainFrame(wx.Frame):
         self.core.on_status_change = self.on_status_change
         self.core.on_start_rest = self.on_start_rest
         self.core.on_work_complete = self.on_work_complete
+        self.core.on_temp_pause = self.on_temp_pause
+        self.core.on_temp_resume = self.on_temp_resume
         
         self._init_ui()
         
@@ -49,10 +51,16 @@ class MainFrame(wx.Frame):
             idle_detection_enabled = self.core.config.idle_detection_enabled
             idle_threshold_minutes = self.core.config.idle_threshold_minutes
             
+            # 获取临时暂停配置
+            temp_pause_enabled = self.temp_pause_checkbox.GetValue()
+            temp_pause_duration = self.temp_pause_duration_spin.GetValue()
+            
             self.core.start_work_session(
                 work_time, rest_time, play_sound, allow_password,
                 idle_detection_enabled=idle_detection_enabled,
-                idle_threshold_minutes=idle_threshold_minutes
+                idle_threshold_minutes=idle_threshold_minutes,
+                temp_pause_enabled=temp_pause_enabled,
+                temp_pause_duration=temp_pause_duration
             )
             
             # 显示托盘通知
@@ -108,7 +116,7 @@ class MainFrame(wx.Frame):
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 添加配置控件
-        grid = wx.FlexGridSizer(7, 2, 5, 5)
+        grid = wx.FlexGridSizer(10, 2, 5, 5)
         grid.Add(wx.StaticText(panel, label="工作时间(分钟):"))
         self.work_spin = wx.SpinCtrl(panel, value=str(self.core.config.work_time))
         grid.Add(self.work_spin)
@@ -147,6 +155,25 @@ class MainFrame(wx.Frame):
         self.password_checkbox = wx.CheckBox(panel)
         self.password_checkbox.SetValue(self.core.config.allow_password_skip)
         grid.Add(self.password_checkbox)
+
+        # 添加临时暂停配置
+        grid.Add(wx.StaticText(panel, label="启用临时暂停功能:"))
+        self.temp_pause_checkbox = wx.CheckBox(panel)
+        self.temp_pause_checkbox.SetValue(self.core.config.temp_pause_enabled)
+        grid.Add(self.temp_pause_checkbox)
+        
+        grid.Add(wx.StaticText(panel, label="临时暂停时长(秒):"))
+        self.temp_pause_duration_spin = wx.SpinCtrl(panel, value=str(self.core.config.temp_pause_duration), min=5, max=300)
+        grid.Add(self.temp_pause_duration_spin)
+        
+        grid.Add(wx.StaticText(panel, label="临时暂停快捷键:"))
+        temp_pause_hotkey_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.temp_pause_hotkey_text = wx.TextCtrl(panel, value=self.core.config.temp_pause_hotkey)
+        self.temp_pause_hotkey_btn = wx.Button(panel, label="确定", size=(50, -1))
+        self.temp_pause_hotkey_btn.Bind(wx.EVT_BUTTON, self.on_set_temp_pause_hotkey)
+        temp_pause_hotkey_box.Add(self.temp_pause_hotkey_text, 1, wx.RIGHT, 5)
+        temp_pause_hotkey_box.Add(self.temp_pause_hotkey_btn, 0)
+        grid.Add(temp_pause_hotkey_box)
         
         # 布局
         vbox.Add(grid, 0, wx.ALL|wx.CENTER, 10)
@@ -252,6 +279,14 @@ class MainFrame(wx.Frame):
             # 增加休息时间
             self.rest_screen.add_rest_time()
 
+    def on_temp_pause(self):
+        """临时暂停回调 - 隐藏休息屏幕"""
+        self.rest_screen.temp_pause()
+    
+    def on_temp_resume(self):
+        """恢复休息回调 - 重新显示休息屏幕"""
+        self.rest_screen.temp_resume()
+
     def on_force_rest(self, event=None):
         """处理提前休息按钮"""
         success = self.core.force_rest()
@@ -267,7 +302,9 @@ class MainFrame(wx.Frame):
             self.core.start_work_session(
                 work_time, rest_time, play_sound, allow_password,
                 idle_detection_enabled=idle_detection_enabled,
-                idle_threshold_minutes=idle_threshold_minutes
+                idle_threshold_minutes=idle_threshold_minutes,
+                temp_pause_enabled=self.core.config.temp_pause_enabled,
+                temp_pause_duration=self.core.config.temp_pause_duration
             )
             self.toggle_btn.SetLabel("停止")
             self.Hide()
@@ -286,10 +323,16 @@ class MainFrame(wx.Frame):
             idle_detection_enabled = self.idle_detection_checkbox.GetValue()
             idle_threshold_minutes = self.idle_threshold_spin.GetValue()
             
+            # 获取临时暂停配置
+            temp_pause_enabled = self.temp_pause_checkbox.GetValue()
+            temp_pause_duration = self.temp_pause_duration_spin.GetValue()
+            
             self.core.start_work_session(
                 work_time, rest_time, play_sound, allow_password,
                 idle_detection_enabled=idle_detection_enabled,
-                idle_threshold_minutes=idle_threshold_minutes
+                idle_threshold_minutes=idle_threshold_minutes,
+                temp_pause_enabled=temp_pause_enabled,
+                temp_pause_duration=temp_pause_duration
             )
             self.toggle_btn.SetLabel("停止")
             self.Hide()  # 隐藏主窗口
@@ -315,6 +358,33 @@ class MainFrame(wx.Frame):
                 wx.MessageBox("快捷键设置失败，请检查格式", "错误")
                 # 恢复原来的热键
                 self.hotkey_text.SetValue(self.core.config.hotkey)
+    
+    def on_set_temp_pause_hotkey(self, event):
+        """处理设置临时暂停热键"""
+        new_hotkey = self.temp_pause_hotkey_text.GetValue().strip()
+        if new_hotkey:
+            try:
+                # 收集所有需要重新注册的热键
+                hotkeys_to_register = [
+                    (self.core.config.hotkey, self.core.force_rest)
+                ]
+                
+                # 添加新的临时暂停热键
+                if self.core.config.temp_pause_enabled:
+                    hotkeys_to_register.append((new_hotkey, self.core.temp_pause))
+                
+                # 批量重新注册热键
+                self.core._batch_register_hotkeys(hotkeys_to_register)
+                
+                # 保存配置
+                self.core.config.temp_pause_hotkey = new_hotkey
+                self.core.config.save()
+                
+                wx.MessageBox("临时暂停快捷键设置成功", "提示")
+            except Exception as e:
+                wx.MessageBox(f"临时暂停快捷键设置失败: {str(e)}", "错误")
+                # 恢复原来的热键
+                self.temp_pause_hotkey_text.SetValue(self.core.config.temp_pause_hotkey)
                 
     def on_exit_program(self, event):
         """处理退出程序按钮"""

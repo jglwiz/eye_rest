@@ -11,7 +11,10 @@ class Config:
             "play_sound_after_rest": True,
             "allow_password_skip": False,
             "idle_detection_enabled": True,
-            "idle_threshold_minutes": 2
+            "idle_threshold_minutes": 2,
+            "temp_pause_enabled": True,
+            "temp_pause_duration": 20,
+            "temp_pause_hotkey": "ctrl+shift+e"
         }
         self.load()
 
@@ -27,6 +30,9 @@ class Config:
                     self.allow_password_skip = config.get("allow_password_skip", self.default_config["allow_password_skip"])
                     self.idle_detection_enabled = config.get("idle_detection_enabled", self.default_config["idle_detection_enabled"])
                     self.idle_threshold_minutes = config.get("idle_threshold_minutes", self.default_config["idle_threshold_minutes"])
+                    self.temp_pause_enabled = config.get("temp_pause_enabled", self.default_config["temp_pause_enabled"])
+                    self.temp_pause_duration = config.get("temp_pause_duration", self.default_config["temp_pause_duration"])
+                    self.temp_pause_hotkey = config.get("temp_pause_hotkey", self.default_config["temp_pause_hotkey"])
             except:
                 self._set_defaults()
         else:
@@ -40,6 +46,9 @@ class Config:
         self.allow_password_skip = self.default_config["allow_password_skip"]
         self.idle_detection_enabled = self.default_config["idle_detection_enabled"]
         self.idle_threshold_minutes = self.default_config["idle_threshold_minutes"]
+        self.temp_pause_enabled = self.default_config["temp_pause_enabled"]
+        self.temp_pause_duration = self.default_config["temp_pause_duration"]
+        self.temp_pause_hotkey = self.default_config["temp_pause_hotkey"]
 
     def save(self):
         config = {
@@ -49,7 +58,10 @@ class Config:
             "play_sound_after_rest": self.play_sound_after_rest,
             "allow_password_skip": self.allow_password_skip,
             "idle_detection_enabled": self.idle_detection_enabled,
-            "idle_threshold_minutes": self.idle_threshold_minutes
+            "idle_threshold_minutes": self.idle_threshold_minutes,
+            "temp_pause_enabled": self.temp_pause_enabled,
+            "temp_pause_duration": self.temp_pause_duration,
+            "temp_pause_hotkey": self.temp_pause_hotkey
         }
         with open(self.config_path, "w") as f:
             json.dump(config, f)

@@ -6,6 +6,7 @@ import win32com.client
 from .rest_manager import RestManager
 from .hourly_chart import DarkHourlyChart
 from .statistics_manager import StatisticsManager
+import threading
 
 class RestScreen(wx.Frame):
     """休息界面，只负责UI显示"""
@@ -109,7 +110,7 @@ class RestScreen(wx.Frame):
         input_sizer = wx.BoxSizer(wx.VERTICAL)
         
         # 添加提示文本
-        self.hint = wx.StaticText(input_panel, label="按快捷键可增加1分钟休息时间", style=wx.ALIGN_CENTER)
+        self.hint = wx.StaticText(input_panel, label="按快捷键可增加1分钟休息时间\n按 Ctrl+Shift+E 可临时暂停20秒", style=wx.ALIGN_CENTER)
         self.hint.SetForegroundColour(wx.WHITE)
         hint_font = wx.Font(14, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.hint.SetFont(hint_font)
@@ -211,6 +212,40 @@ class RestScreen(wx.Frame):
             # 显示错误信息
             wx.CallAfter(self.hint.SetLabel, message)
         return success
+    
+    def temp_pause(self):
+        """临时暂停休息屏幕"""
+        # 暂停休息管理器的计时
+        if hasattr(self, 'rest_manager') and self.rest_manager:
+            self.rest_manager.timer_running = False
+            # 等待计时器线程结束
+            if self.rest_manager.timer_thread and self.rest_manager.timer_thread.is_alive():
+                self.rest_manager.timer_thread.join(timeout=1)
+        
+        wx.CallAfter(self.Hide)
+        wx.CallAfter(self.input.SetValue, "")
+    
+    def temp_resume(self):
+        """恢复休息屏幕"""
+        # 恢复休息管理器的计时
+        if hasattr(self, 'rest_manager') and self.rest_manager and self.rest_manager.is_resting:
+            # 重新启动计时器线程
+            self.rest_manager.timer_running = True
+            self.rest_manager.timer_thread = threading.Thread(target=self.rest_manager._timer_func)
+            self.rest_manager.timer_thread.daemon = True
+            self.rest_manager.timer_thread.start()
+            
+            # 立即更新一次显示
+            self.rest_manager._update_display()
+        
+        # 重新显示窗口
+        def show_and_setup():
+            self.Show()
+            self.Maximize(True)
+            self._set_window_style()
+            self.input.SetFocus()
+        
+        wx.CallAfter(show_and_setup)
         
     def _update_display(self, data):
         """更新显示内容

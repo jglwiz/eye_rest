@@ -32,6 +32,10 @@ class EyeRestCore:
         # 离开状态相关
         self.away_start_time = 0
         
+        # 临时暂停相关
+        self.temp_pause_start_time = 0
+        self.saved_rest_time = 0  # 暂停时保存的剩余休息时间
+        
         # 活动检测
         self.activity_detector = ActivityDetector()
         self.idle_threshold = self.config.idle_threshold_minutes * 60
@@ -47,6 +51,8 @@ class EyeRestCore:
         self.on_status_change = None    # 状态变化回调
         self.on_start_rest = None       # 开始休息回调
         self.on_work_complete = None    # 工作完成回调
+        self.on_temp_pause = None       # 临时暂停回调
+        self.on_temp_resume = None      # 恢复休息回调
         
         # 启动事件循环线程
         self.event_loop_thread = threading.Thread(target=self._event_loop)
@@ -102,10 +108,16 @@ class EyeRestCore:
             self._handle_rest_complete_event()
         elif event_type == 'REST_CANCEL':
             self._handle_rest_cancel_event()
+        elif event_type == 'TEMP_PAUSE':
+            self._handle_temp_pause_event()
+        elif event_type == 'TEMP_RESUME':
+            self._handle_temp_resume_event()
         
         # 定时器事件
         elif event_type == 'WORK_TIMEOUT':
             self._handle_work_timeout_event()
+        elif event_type == 'TEMP_PAUSE_TIMEOUT':
+            self._handle_temp_pause_timeout_event()
         elif event_type == 'CHECK_IDLE':
             self._handle_check_idle_event()
         elif event_type == 'CHECK_ACTIVITY':
@@ -130,6 +142,8 @@ class EyeRestCore:
         self.config.allow_password_skip = data['allow_password']
         self.config.idle_detection_enabled = data.get('idle_detection_enabled', False)
         self.config.idle_threshold_minutes = data.get('idle_threshold_minutes', 5)
+        self.config.temp_pause_enabled = data.get('temp_pause_enabled', True)
+        self.config.temp_pause_duration = data.get('temp_pause_duration', 20)
         self.config.save()
         
         # 更新空闲检测阈值
@@ -166,6 +180,13 @@ class EyeRestCore:
             self.logger.info("当前正在休息，增加休息时间")
             if self.on_work_complete:
                 wx.CallAfter(self.on_work_complete, "add_time")
+        elif self.current_state == AppState.TEMP_PAUSED:
+            # 从临时暂停状态立即恢复到休息状态
+            self.logger.info("临时暂停中，强制恢复休息")
+            self._cancel_timer('temp_pause_timer')
+            self._transition_to(AppState.RESTING)
+            if self.on_temp_resume:
+                wx.CallAfter(self.on_temp_resume)
         elif self.current_state in [AppState.WORKING, AppState.AWAY]:
             # 开始新的休息
             self.logger.info("强制开始休息")
@@ -235,6 +256,45 @@ class EyeRestCore:
             self._transition_to(AppState.WORKING)
             self._start_work_timers()
             self.logger.info("休息被取消，重新开始工作")
+    
+    def _handle_temp_pause_event(self):
+        """处理临时暂停事件"""
+        if self.current_state == AppState.RESTING and self.config.temp_pause_enabled:
+            # 保存当前休息剩余时间 - 使用默认值，实际时间由UI层处理
+            self.saved_rest_time = self.config.rest_time * 60
+            
+            # 转换到临时暂停状态
+            self._transition_to(AppState.TEMP_PAUSED)
+            
+            # 启动临时暂停定时器
+            self._start_timer('temp_pause_timer', self.config.temp_pause_duration, 'TEMP_PAUSE_TIMEOUT')
+            
+            # 通知UI隐藏休息屏幕（UI层会保存实际剩余时间）
+            if self.on_temp_pause:
+                wx.CallAfter(self.on_temp_pause)
+            
+            self.logger.info(f"临时暂停休息 {self.config.temp_pause_duration} 秒")
+    
+    def _handle_temp_resume_event(self):
+        """处理恢复休息事件"""
+        if self.current_state == AppState.TEMP_PAUSED:
+            # 取消暂停定时器
+            self._cancel_timer('temp_pause_timer')
+            
+            # 转换回休息状态
+            self._transition_to(AppState.RESTING)
+            
+            # 通知UI恢复休息屏幕（不传递时间，由UI层自己管理）
+            if self.on_temp_resume:
+                wx.CallAfter(self.on_temp_resume)
+            
+            self.logger.info("恢复休息状态")
+    
+    def _handle_temp_pause_timeout_event(self):
+        """处理临时暂停超时事件"""
+        if self.current_state == AppState.TEMP_PAUSED:
+            # 自动恢复休息
+            self._handle_temp_resume_event()
     
     def _handle_update_config_event(self, data):
         """处理配置更新事件"""
@@ -346,6 +406,8 @@ class EyeRestCore:
                 self.work_end_time = self.work_start_time + self.config.work_time * 60
         elif state == AppState.AWAY:
             self.away_start_time = time.time()
+        elif state == AppState.TEMP_PAUSED:
+            self.temp_pause_start_time = time.time()
         elif state == AppState.IDLE:
             self._reset_timers()
 
@@ -355,14 +417,63 @@ class EyeRestCore:
         self.work_end_time = 0
         self.remaining_work_time = 0
         self.away_start_time = 0
+        self.temp_pause_start_time = 0
+        self.saved_rest_time = 0
 
     def _init_hotkey(self):
         """初始化全局热键"""
         try:
-            self.hotkey_manager.register_hotkey(self.config.hotkey, self.force_rest)
+            # 收集所有需要注册的热键
+            hotkeys_to_register = [
+                (self.config.hotkey, self.force_rest)
+            ]
+            
+            # 添加临时暂停热键
+            if self.config.temp_pause_enabled:
+                hotkeys_to_register.append((self.config.temp_pause_hotkey, self.temp_pause))
+            
+            # 批量注册所有热键
+            self._batch_register_hotkeys(hotkeys_to_register)
+                
             self.logger.info("热键初始化成功")
         except Exception as e:
             self.logger.error(f"热键初始化失败: {str(e)}")
+    
+    def _batch_register_hotkeys(self, hotkey_list):
+        """批量注册热键，避免重复注册问题"""
+        try:
+            # 停止现有监听
+            if self.hotkey_manager.is_running:
+                self.hotkey_manager.stop()
+            
+            # 清空现有绑定
+            self.hotkey_manager._bindings.clear()
+            
+            # 批量添加所有热键绑定
+            for hotkey_str, callback in hotkey_list:
+                normalized_hotkey = self.hotkey_manager._normalize_hotkey(hotkey_str)
+                self.hotkey_manager._bindings[normalized_hotkey] = callback
+                self.logger.debug(f"添加热键绑定: {normalized_hotkey}")
+            
+            # 构建绑定列表
+            from global_hotkeys import register_hotkeys, start_checking_hotkeys
+            bindings = [
+                [key, None, func, True]
+                for key, func in self.hotkey_manager._bindings.items()
+            ]
+            
+            # 一次性注册所有热键
+            register_hotkeys(bindings)
+            
+            # 开始监听
+            start_checking_hotkeys()
+            self.hotkey_manager.is_running = True
+            
+            self.logger.info(f"批量注册热键成功，共 {len(hotkey_list)} 个热键")
+            
+        except Exception as e:
+            self.logger.error(f"批量注册热键失败: {str(e)}")
+            raise
     
     # 公共API - 发送事件到状态机
     def start_work_session(self, work_time, rest_time, play_sound, allow_password, **kwargs):
@@ -389,6 +500,13 @@ class EyeRestCore:
         event = {'type': 'FORCE_REST'}
         self.event_queue.put(event)
         return True  # 总是返回True，因为事件已发送
+    
+    def temp_pause(self, event=None):
+        """发送临时暂停事件 - 只在休息状态时响应"""
+        if self.current_state == AppState.RESTING:
+            event = {'type': 'TEMP_PAUSE'}
+            self.event_queue.put(event)
+        return True  # 总是返回True，因为热键需要
     
     def on_rest_complete(self):
         """休息完成回调 - 发送事件"""
@@ -420,12 +538,18 @@ class EyeRestCore:
                 self.logger.info(f"热键未改变，跳过设置: {new_hotkey}")
                 return True
             
-            # 先停止所有热键监听并清空绑定
-            self.hotkey_manager.stop()
-            self.hotkey_manager._bindings.clear()
+            # 收集所有需要重新注册的热键
+            hotkeys_to_register = [
+                (new_hotkey, self.force_rest)
+            ]
             
-            # 注册新的热键
-            self.hotkey_manager.register_hotkey(new_hotkey, self.force_rest)
+            # 添加临时暂停热键
+            if self.config.temp_pause_enabled:
+                hotkeys_to_register.append((self.config.temp_pause_hotkey, self.temp_pause))
+            
+            # 批量重新注册热键
+            self._batch_register_hotkeys(hotkeys_to_register)
+            
             self.config.hotkey = new_hotkey
             self.config.save()
             self.logger.info(f"热键更新成功: {new_hotkey}")
@@ -464,6 +588,12 @@ class EyeRestCore:
                 away_duration = int(time.time() - self.away_start_time)
                 return f"检测到用户离开 ({away_duration//60}:{away_duration%60:02d})"
             return "用户离开"
+        elif self.current_state == AppState.TEMP_PAUSED:
+            if hasattr(self, 'temp_pause_start_time') and self.temp_pause_start_time > 0:
+                pause_duration = int(time.time() - self.temp_pause_start_time)
+                remaining = max(0, self.config.temp_pause_duration - pause_duration)
+                return f"临时暂停 (还剩 {remaining} 秒)"
+            return "临时暂停"
         return "未知状态"
 
     # 向后兼容性属性
