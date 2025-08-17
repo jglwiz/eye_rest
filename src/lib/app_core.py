@@ -2,6 +2,7 @@ import threading
 import time
 import queue
 import wx
+import winsound
 from .config import Config
 from .hotkey_manager import HotkeyManager
 from .logger_manager import LoggerManager
@@ -116,6 +117,8 @@ class EyeRestCore:
         # 定时器事件
         elif event_type == 'WORK_TIMEOUT':
             self._handle_work_timeout_event()
+        elif event_type == 'WORK_END_REMINDER':
+            self._handle_work_end_reminder_event()
         elif event_type == 'TEMP_PAUSE_TIMEOUT':
             self._handle_temp_pause_timeout_event()
         elif event_type == 'CHECK_IDLE':
@@ -144,6 +147,7 @@ class EyeRestCore:
         self.config.idle_threshold_minutes = data.get('idle_threshold_minutes', 5)
         self.config.temp_pause_enabled = data.get('temp_pause_enabled', True)
         self.config.temp_pause_duration = data.get('temp_pause_duration', 20)
+        self.config.work_end_reminder_enabled = data.get('work_end_reminder_enabled', False)
         self.config.save()
         
         # 更新空闲检测阈值
@@ -198,6 +202,13 @@ class EyeRestCore:
         if self.current_state == AppState.WORKING:
             self._cancel_all_timers()
             self._start_rest()
+    
+    def _handle_work_end_reminder_event(self):
+        """处理工作结束前40秒提醒事件"""
+        if self.current_state == AppState.WORKING:
+            # 播放提醒音
+            self._play_work_end_reminder_sound()
+            self.logger.info("工作结束前40秒提醒")
     
     def _handle_check_idle_event(self):
         """处理检查用户空闲事件"""
@@ -313,6 +324,11 @@ class EyeRestCore:
         work_seconds = self.config.work_time * 60
         self._start_timer('work_countdown', work_seconds, 'WORK_TIMEOUT')
         
+        # 工作结束前40秒提醒定时器（如果启用且工作时间大于40秒）
+        if self.config.work_end_reminder_enabled and work_seconds > 40:
+            reminder_seconds = work_seconds - 40
+            self._start_timer('work_end_reminder', reminder_seconds, 'WORK_END_REMINDER')
+        
         # 用户活动检测定时器（如果启用）
         if self.config.idle_detection_enabled:
             self._start_timer('idle_check', 5, 'CHECK_IDLE')
@@ -364,6 +380,8 @@ class EyeRestCore:
         if 'work_countdown' in self.timers:
             self.remaining_work_time = max(0, self.work_end_time - time.time())
             self._cancel_timer('work_countdown')
+            # 也取消工作结束提醒定时器
+            self._cancel_timer('work_end_reminder')
             self.logger.debug(f"暂停工作计时器，剩余时间: {self.remaining_work_time}秒")
     
     def _resume_work_timer(self):
@@ -371,17 +389,47 @@ class EyeRestCore:
         if hasattr(self, 'remaining_work_time') and self.remaining_work_time > 0:
             self.work_end_time = time.time() + self.remaining_work_time
             self._start_timer('work_countdown', self.remaining_work_time, 'WORK_TIMEOUT')
+            
+            # 如果启用了工作结束提醒且剩余时间大于40秒，重新设置提醒定时器
+            if self.config.work_end_reminder_enabled and self.remaining_work_time > 40:
+                reminder_seconds = self.remaining_work_time - 40
+                self._start_timer('work_end_reminder', reminder_seconds, 'WORK_END_REMINDER')
+            
             self.logger.debug(f"恢复工作计时器，剩余时间: {self.remaining_work_time}秒")
         else:
             # 如果没有剩余时间，开始新的工作周期
             self.work_end_time = time.time() + self.config.work_time * 60
             self._start_timer('work_countdown', self.config.work_time * 60, 'WORK_TIMEOUT')
+            
+            # 重新设置工作结束提醒定时器（如果启用）
+            work_seconds = self.config.work_time * 60
+            if self.config.work_end_reminder_enabled and work_seconds > 40:
+                reminder_seconds = work_seconds - 40
+                self._start_timer('work_end_reminder', reminder_seconds, 'WORK_END_REMINDER')
     
     def _start_rest(self):
         """开始休息"""
         self._transition_to(AppState.RESTING)
         if self.on_start_rest:
             wx.CallAfter(self.on_start_rest, self.config.rest_time)
+
+    def _play_work_end_reminder_sound(self):
+        """播放工作结束前提醒音效"""
+        try:
+            def play_sound():
+                # 播放简单的提醒音（两次短音）
+                winsound.Beep(800, 200)  # 800Hz, 200ms
+                time.sleep(0.1)
+                winsound.Beep(800, 200)  # 800Hz, 200ms
+            
+            # 在单独线程中播放音效，避免阻塞
+            sound_thread = threading.Thread(target=play_sound)
+            sound_thread.daemon = True
+            sound_thread.start()
+            
+            self.logger.info("播放工作结束前提醒音效")
+        except Exception as e:
+            self.logger.error(f"播放提醒音效失败: {str(e)}")
 
     def _transition_to(self, new_state):
         """安全的状态转换"""

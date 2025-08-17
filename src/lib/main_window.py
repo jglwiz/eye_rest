@@ -55,12 +55,16 @@ class MainFrame(wx.Frame):
             temp_pause_enabled = self.temp_pause_checkbox.GetValue()
             temp_pause_duration = self.temp_pause_duration_spin.GetValue()
             
+            # 获取工作结束提醒配置
+            work_end_reminder_enabled = self.work_end_reminder_checkbox.GetValue()
+            
             self.core.start_work_session(
                 work_time, rest_time, play_sound, allow_password,
                 idle_detection_enabled=idle_detection_enabled,
                 idle_threshold_minutes=idle_threshold_minutes,
                 temp_pause_enabled=temp_pause_enabled,
-                temp_pause_duration=temp_pause_duration
+                temp_pause_duration=temp_pause_duration,
+                work_end_reminder_enabled=work_end_reminder_enabled
             )
             
             # 显示托盘通知
@@ -116,7 +120,7 @@ class MainFrame(wx.Frame):
         vbox = wx.BoxSizer(wx.VERTICAL)
         
         # 添加配置控件
-        grid = wx.FlexGridSizer(10, 2, 5, 5)
+        grid = wx.FlexGridSizer(11, 2, 5, 5)
         grid.Add(wx.StaticText(panel, label="工作时间(分钟):"))
         self.work_spin = wx.SpinCtrl(panel, value=str(self.core.config.work_time))
         grid.Add(self.work_spin)
@@ -174,6 +178,12 @@ class MainFrame(wx.Frame):
         temp_pause_hotkey_box.Add(self.temp_pause_hotkey_text, 1, wx.RIGHT, 5)
         temp_pause_hotkey_box.Add(self.temp_pause_hotkey_btn, 0)
         grid.Add(temp_pause_hotkey_box)
+
+        # 添加工作结束前提醒配置
+        grid.Add(wx.StaticText(panel, label="工作结束前40秒提醒:"))
+        self.work_end_reminder_checkbox = wx.CheckBox(panel)
+        self.work_end_reminder_checkbox.SetValue(self.core.config.work_end_reminder_enabled)
+        grid.Add(self.work_end_reminder_checkbox)
         
         # 布局
         vbox.Add(grid, 0, wx.ALL|wx.CENTER, 10)
@@ -299,12 +309,16 @@ class MainFrame(wx.Frame):
             idle_detection_enabled = self.idle_detection_checkbox.GetValue()
             idle_threshold_minutes = self.idle_threshold_spin.GetValue()
             
+            # 获取工作结束提醒配置
+            work_end_reminder_enabled = self.work_end_reminder_checkbox.GetValue()
+            
             self.core.start_work_session(
                 work_time, rest_time, play_sound, allow_password,
                 idle_detection_enabled=idle_detection_enabled,
                 idle_threshold_minutes=idle_threshold_minutes,
                 temp_pause_enabled=self.core.config.temp_pause_enabled,
-                temp_pause_duration=self.core.config.temp_pause_duration
+                temp_pause_duration=self.core.config.temp_pause_duration,
+                work_end_reminder_enabled=work_end_reminder_enabled
             )
             self.toggle_btn.SetLabel("停止")
             self.Hide()
@@ -327,12 +341,16 @@ class MainFrame(wx.Frame):
             temp_pause_enabled = self.temp_pause_checkbox.GetValue()
             temp_pause_duration = self.temp_pause_duration_spin.GetValue()
             
+            # 获取工作结束提醒配置
+            work_end_reminder_enabled = self.work_end_reminder_checkbox.GetValue()
+            
             self.core.start_work_session(
                 work_time, rest_time, play_sound, allow_password,
                 idle_detection_enabled=idle_detection_enabled,
                 idle_threshold_minutes=idle_threshold_minutes,
                 temp_pause_enabled=temp_pause_enabled,
-                temp_pause_duration=temp_pause_duration
+                temp_pause_duration=temp_pause_duration,
+                work_end_reminder_enabled=work_end_reminder_enabled
             )
             self.toggle_btn.SetLabel("停止")
             self.Hide()  # 隐藏主窗口

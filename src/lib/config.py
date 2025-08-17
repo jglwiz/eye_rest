@@ -14,7 +14,8 @@ class Config:
             "idle_threshold_minutes": 2,
             "temp_pause_enabled": True,
             "temp_pause_duration": 20,
-            "temp_pause_hotkey": "ctrl+shift+e"
+            "temp_pause_hotkey": "ctrl+shift+e",
+            "work_end_reminder_enabled": False
         }
         self.load()
 
@@ -33,6 +34,7 @@ class Config:
                     self.temp_pause_enabled = config.get("temp_pause_enabled", self.default_config["temp_pause_enabled"])
                     self.temp_pause_duration = config.get("temp_pause_duration", self.default_config["temp_pause_duration"])
                     self.temp_pause_hotkey = config.get("temp_pause_hotkey", self.default_config["temp_pause_hotkey"])
+                    self.work_end_reminder_enabled = config.get("work_end_reminder_enabled", self.default_config["work_end_reminder_enabled"])
             except:
                 self._set_defaults()
         else:
@@ -49,6 +51,7 @@ class Config:
         self.temp_pause_enabled = self.default_config["temp_pause_enabled"]
         self.temp_pause_duration = self.default_config["temp_pause_duration"]
         self.temp_pause_hotkey = self.default_config["temp_pause_hotkey"]
+        self.work_end_reminder_enabled = self.default_config["work_end_reminder_enabled"]
 
     def save(self):
         config = {
@@ -61,7 +64,8 @@ class Config:
             "idle_threshold_minutes": self.idle_threshold_minutes,
             "temp_pause_enabled": self.temp_pause_enabled,
             "temp_pause_duration": self.temp_pause_duration,
-            "temp_pause_hotkey": self.temp_pause_hotkey
+            "temp_pause_hotkey": self.temp_pause_hotkey,
+            "work_end_reminder_enabled": self.work_end_reminder_enabled
         }
         with open(self.config_path, "w") as f:
             json.dump(config, f)
