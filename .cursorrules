@@ -1,0 +1,34 @@
+# Eye Rest Application Development Rules
+
+## Environment Setup
+- Always use `conda activate eye` before running any tests or executing the application
+- Use Python for all implementations - keep code simple and concise
+- Do not automatically install Python packages without explicit user consent
+- Command-line environment is PowerShell on Windows 11
+
+## Code Guidelines
+- Maintain clean, readable Python code
+- Follow existing project structure in the `src/` directory
+- Use the established logging and configuration patterns
+- Preserve the modular architecture with separate lib components
+
+## Testing and Execution
+- Before any test execution: `conda activate eye`
+- Ensure all dependencies are available in the conda environment
+- Test the application thoroughly before building executables
+
+## Build Process
+- Use the provided PowerShell scripts for building executables
+- Follow the established deployment process via `deploy.ps1`
+- Maintain compatibility with Windows 11 environment
+
+## File Management
+- Respect the existing project structure
+- Keep configuration files (`.json`) in the root directory
+- Maintain separation between source code (`src/`) and documentation (`doc/`)
+- Use appropriate logging directory structure
+
+## Communication
+- Always respond in Chinese with English punctuation
+- Provide clear, concise explanations for code changes
+- Document any significant architectural decisions
